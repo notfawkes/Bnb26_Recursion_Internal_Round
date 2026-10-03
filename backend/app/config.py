@@ -3,7 +3,6 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     APP_ENV: str = "development"
-    DATABASE_URL: str = "sqlite:///./quorum.db"
 
     # Blockchain RPC & Contract Settings (loaded from .env)
     BLOCKCHAIN_RPC_URL: str = "http://127.0.0.1:8545"

@@ -54,7 +54,9 @@ class MockBlockchainService:
         commit_sha: str,
         published_hash: str,
         builder_count: int,
-        quorum_required: int
+        quorum_required: int,
+        build_config_id: str = "python-package-v1",
+        artifact_name: str = "safecalc.tar.gz"
     ) -> Dict[str, Any]:
         rel_id = self._next_release_id
         self._next_release_id += 1
@@ -62,9 +64,11 @@ class MockBlockchainService:
         tx_hash = "0x" + hashlib.sha256(f"create_{rel_id}_{time.time()}".encode()).hexdigest()
 
         self._releases[rel_id] = {
-            "release_id": rel_id,
-            "repository": repository_url,
-            "commit": commit_sha,
+            "release_id": str(rel_id),
+            "repository_url": repository_url,
+            "commit_sha": commit_sha,
+            "build_config_id": build_config_id,
+            "artifact_name": artifact_name,
             "publishedHash": published_hash,
             "quorumHash": "",
             "builderCount": builder_count,
@@ -77,7 +81,7 @@ class MockBlockchainService:
         }
         self._attestations[rel_id] = []
 
-        return {"recorded": True, "release_id": rel_id, "transaction_hash": tx_hash}
+        return {"recorded": True, "release_id": str(rel_id), "transaction_hash": tx_hash}
 
     async def submit_attestation(
         self,
@@ -113,7 +117,6 @@ class MockBlockchainService:
             tx_hash = "0x" + hashlib.sha256(f"fin_empty_{rel_id}".encode()).hexdigest()
             return {"recorded": False, "transaction_hash": tx_hash}
 
-        # Calculate quorum on mock contract
         atts = self._attestations.get(rel_id, [])
         hash_counts: Dict[str, int] = {}
         for a in atts:
@@ -149,26 +152,42 @@ class MockBlockchainService:
 
         return {
             "recorded": True,
-            "release_id": rel_id,
+            "release_id": str(rel_id),
             "decision": DECISION_MAP[rel["decision"]],
             "transaction_hash": tx_hash
         }
 
     async def get_release(self, release_id: int | str) -> Dict[str, Any]:
-        rel_id = int(release_id)
+        try:
+            rel_id = int(str(release_id).replace("REL-", ""))
+        except ValueError:
+            rel_id = -1
+
         rel = self._releases.get(rel_id)
         if not rel:
             return {
-                "release_id": rel_id,
+                "release_id": str(release_id),
+                "repository_url": "",
+                "commit_sha": "",
+                "build_config_id": "python-package-v1",
+                "artifact_name": "safecalc.tar.gz",
                 "published_hash": "",
                 "quorum_hash": "",
+                "builder_count": 3,
+                "quorum_required": 2,
                 "decision": "NONE",
                 "is_finalized": False
             }
         return {
-            "release_id": rel["release_id"],
+            "release_id": str(rel["release_id"]),
+            "repository_url": rel["repository_url"],
+            "commit_sha": rel["commit_sha"],
+            "build_config_id": rel.get("build_config_id", "python-package-v1"),
+            "artifact_name": rel.get("artifact_name", "safecalc.tar.gz"),
             "published_hash": rel["publishedHash"],
             "quorum_hash": rel["quorumHash"],
+            "builder_count": rel["builderCount"],
+            "quorum_required": rel["quorumRequired"],
             "decision": DECISION_MAP[rel["decision"]],
             "is_finalized": rel["isFinalized"],
             "create_release_tx": rel["create_release_tx"],
@@ -177,7 +196,11 @@ class MockBlockchainService:
         }
 
     async def get_attestations(self, release_id: int | str) -> List[Dict[str, Any]]:
-        return self._attestations.get(int(release_id), [])
+        try:
+            rel_id = int(str(release_id).replace("REL-", ""))
+        except ValueError:
+            rel_id = 1
+        return self._attestations.get(rel_id, [])
 
     async def is_builder(self, address: str) -> bool:
         return True
@@ -216,7 +239,6 @@ class AnvilBlockchainService:
             try:
                 with open(abi_path, "r", encoding="utf-8") as f:
                     content = json.load(f)
-                    # If file is a wrapper json with "abi" key, extract it
                     if isinstance(content, dict) and "abi" in content:
                         return content["abi"]
                     if isinstance(content, list):
@@ -234,10 +256,14 @@ class AnvilBlockchainService:
         commit_sha: str,
         published_hash: str,
         builder_count: int,
-        quorum_required: int
+        quorum_required: int,
+        build_config_id: str = "python-package-v1",
+        artifact_name: str = "safecalc.tar.gz"
     ) -> Dict[str, Any]:
         if not self.is_connected():
-            return await self.mock_fallback.create_release(repository_url, commit_sha, published_hash, builder_count, quorum_required)
+            return await self.mock_fallback.create_release(
+                repository_url, commit_sha, published_hash, builder_count, quorum_required, build_config_id, artifact_name
+            )
 
         try:
             acct = self.w3.eth.accounts[0] if self.w3.eth.accounts else None
@@ -261,7 +287,11 @@ class AnvilBlockchainService:
                 tx_hash_bytes = self.w3.eth.send_raw_transaction(signed_tx.raw_transaction)
                 receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash_bytes)
                 rel_id = self.contract.functions.releaseCount().call()
-                return {"recorded": True, "release_id": rel_id, "transaction_hash": receipt.transactionHash.hex()}
+                # Store extra metadata in mock fallback memory as well
+                await self.mock_fallback.create_release(
+                    repository_url, commit_sha, published_hash, builder_count, quorum_required, build_config_id, artifact_name
+                )
+                return {"recorded": True, "release_id": str(rel_id), "transaction_hash": receipt.transactionHash.hex()}
 
             elif acct:
                 tx = self.contract.functions.createRelease(
@@ -274,11 +304,16 @@ class AnvilBlockchainService:
 
                 receipt = self.w3.eth.wait_for_transaction_receipt(tx)
                 rel_id = self.contract.functions.releaseCount().call()
-                return {"recorded": True, "release_id": rel_id, "transaction_hash": receipt.transactionHash.hex()}
+                await self.mock_fallback.create_release(
+                    repository_url, commit_sha, published_hash, builder_count, quorum_required, build_config_id, artifact_name
+                )
+                return {"recorded": True, "release_id": str(rel_id), "transaction_hash": receipt.transactionHash.hex()}
         except Exception:
             pass
 
-        return await self.mock_fallback.create_release(repository_url, commit_sha, published_hash, builder_count, quorum_required)
+        return await self.mock_fallback.create_release(
+            repository_url, commit_sha, published_hash, builder_count, quorum_required, build_config_id, artifact_name
+        )
 
     async def submit_attestation(
         self,
@@ -294,11 +329,12 @@ class AnvilBlockchainService:
             eth_priv = builder_registry.get_ethereum_private_key(builder_id)
             wallet = builder_info["wallet_address"] if builder_info else None
             art_bytes32 = _to_bytes32(artifact_hash)
+            rel_int = int(str(release_id).replace("REL-", ""))
 
             if eth_priv and self.w3:
                 account = self.w3.eth.account.from_key(eth_priv)
                 tx_data = self.contract.functions.submitAttestation(
-                    int(release_id),
+                    rel_int,
                     art_bytes32
                 ).build_transaction({
                     'from': account.address,
@@ -309,13 +345,15 @@ class AnvilBlockchainService:
                 signed_tx = self.w3.eth.account.sign_transaction(tx_data, eth_priv)
                 tx_hash = self.w3.eth.send_raw_transaction(signed_tx.raw_transaction)
                 self.w3.eth.wait_for_transaction_receipt(tx_hash)
+                await self.mock_fallback.submit_attestation(release_id, builder_id, artifact_hash)
                 return {"recorded": True, "transaction_hash": tx_hash.hex()}
             elif wallet:
                 tx = self.contract.functions.submitAttestation(
-                    int(release_id),
+                    rel_int,
                     art_bytes32
                 ).transact({'from': Web3.to_checksum_address(wallet)})
                 receipt = self.w3.eth.wait_for_transaction_receipt(tx)
+                await self.mock_fallback.submit_attestation(release_id, builder_id, artifact_hash)
                 return {"recorded": True, "transaction_hash": receipt.transactionHash.hex()}
         except Exception:
             pass
@@ -328,13 +366,15 @@ class AnvilBlockchainService:
 
         try:
             acct = self.w3.eth.accounts[0] if self.w3.eth.accounts else self.w3.eth.coinbase
-            tx = self.contract.functions.finalizeRelease(int(release_id)).transact({'from': acct})
+            rel_int = int(str(release_id).replace("REL-", ""))
+            tx = self.contract.functions.finalizeRelease(rel_int).transact({'from': acct})
             receipt = self.w3.eth.wait_for_transaction_receipt(tx)
 
+            await self.mock_fallback.finalize_release(release_id)
             rel_data = await self.get_release(release_id)
             return {
                 "recorded": True,
-                "release_id": int(release_id),
+                "release_id": str(release_id),
                 "decision": rel_data.get("decision", "VERIFIED"),
                 "transaction_hash": receipt.transactionHash.hex()
             }
@@ -346,19 +386,36 @@ class AnvilBlockchainService:
             return await self.mock_fallback.get_release(release_id)
 
         try:
-            res = self.contract.functions.getRelease(int(release_id)).call()
+            rel_int = int(str(release_id).replace("REL-", ""))
+            res = self.contract.functions.getRelease(rel_int).call()
             # res struct: (id, repository, commit, publishedHash, builderCount, quorumRequired, quorumHash, decision, isFinalized)
+            repo_url = res[1]
+            commit_s = res[2]
             pub_h = _from_bytes32(res[3])
+            b_count = res[4]
+            q_req = res[5]
             q_h = _from_bytes32(res[6])
             dec_int = res[7]
             is_fin = res[8]
             dec_str = DECISION_MAP.get(dec_int, "NONE")
+
+            mock_data = await self.mock_fallback.get_release(release_id)
+
             return {
-                "release_id": int(release_id),
+                "release_id": str(res[0]),
+                "repository_url": repo_url,
+                "commit_sha": commit_s,
+                "build_config_id": mock_data.get("build_config_id", "python-package-v1"),
+                "artifact_name": mock_data.get("artifact_name", "safecalc.tar.gz"),
                 "published_hash": pub_h,
                 "quorum_hash": q_h,
+                "builder_count": b_count,
+                "quorum_required": q_req,
                 "decision": dec_str,
-                "is_finalized": is_fin
+                "is_finalized": is_fin,
+                "create_release_tx": mock_data.get("create_release_tx"),
+                "attestation_txs": mock_data.get("attestation_txs", []),
+                "finalize_tx": mock_data.get("finalize_tx")
             }
         except Exception:
             return await self.mock_fallback.get_release(release_id)
@@ -368,7 +425,8 @@ class AnvilBlockchainService:
             return await self.mock_fallback.get_attestations(release_id)
 
         try:
-            atts = self.contract.functions.getAttestations(int(release_id)).call()
+            rel_int = int(str(release_id).replace("REL-", ""))
+            atts = self.contract.functions.getAttestations(rel_int).call()
             return [{"builder": a[0], "artifactHash": _from_bytes32(a[1]), "timestamp": a[2]} for a in atts]
         except Exception:
             return await self.mock_fallback.get_attestations(release_id)

@@ -15,7 +15,7 @@ async def create_release(
     service: ReleaseService = Depends(get_release_service)
 ):
     """
-    Create a new release for Quorum verification.
+    Create a new release directly on the blockchain.
     Validates repository URL, pinned commit SHA, and published artifact SHA-256.
     """
     try:
@@ -33,9 +33,9 @@ async def get_release(
     release_id: str,
     service: ReleaseService = Depends(get_release_service)
 ):
-    """Retrieve details of a specific release by ID."""
+    """Retrieve details of a specific release directly from the blockchain state."""
     try:
-        return service.get_release(release_id)
+        return await service.get_release(release_id)
     except ReleaseNotFoundError as e:
         raise HTTPException(status_code=404, detail=e.message)
     except Exception as e:
@@ -49,19 +49,18 @@ async def verify_release(
     service: ReleaseService = Depends(get_release_service)
 ):
     """
-    Execute full end-to-end verification flow for a release:
-    1. Loads release
+    Execute full end-to-end database-free verification flow for a release:
+    1. Loads release directly from blockchain
     2. Runs Person 2 Builder Manager (or mock with optional scenario)
     3. Verifies attestations (signatures, identity, repo, commit)
     4. Calculates local expected quorum
     5. Submits builder evidence & final decision to Person 1 Blockchain contract
-    6. Compares local expectation against authoritative contract state
-    7. Returns detailed VerificationResponse with decision_source=BLOCKCHAIN
+    6. Returns authoritative decision directly from blockchain with decision_source=BLOCKCHAIN
     """
     try:
-        release = service.get_release(release_id)
+        release = await service.get_release(release_id)
         if scenario:
-            mock_builder_manager.set_scenario(scenario, published_hash=release.published_hash)
+            mock_builder_manager.set_scenario(scenario, published_hash=release.published_hash, artifact_name=release.artifact_name)
         return await service.verify_release(release_id)
     except ReleaseNotFoundError as e:
         raise HTTPException(status_code=404, detail=e.message)
@@ -76,11 +75,11 @@ async def get_verification_result(
     release_id: str,
     service: ReleaseService = Depends(get_release_service)
 ):
-    """Retrieve the stored verification result and audit record for a release."""
+    """Retrieve stored verification audit record directly from blockchain state."""
     try:
-        audit = service.get_verification_result(release_id)
+        audit = await service.get_verification_result(release_id)
         if not audit:
-            raise HTTPException(status_code=404, detail=f"No verification result found for release '{release_id}'. Run /verify first.")
+            raise HTTPException(status_code=404, detail=f"No finalized verification result found on-chain for release '{release_id}'. Run /verify first.")
         return audit
     except ReleaseNotFoundError as e:
         raise HTTPException(status_code=404, detail=e.message)
@@ -95,10 +94,10 @@ async def get_release_attestations(
     release_id: str,
     service: ReleaseService = Depends(get_release_service)
 ):
-    """Retrieve stored attestations submitted for a release."""
+    """Retrieve stored attestations submitted for a release directly from blockchain."""
     try:
-        service.get_release(release_id)
-        attestations = service.db.get_attestations(release_id)
+        await service.get_release(release_id)
+        attestations = await service.get_attestations(release_id)
         return {"release_id": release_id, "count": len(attestations), "attestations": attestations}
     except ReleaseNotFoundError as e:
         raise HTTPException(status_code=404, detail=e.message)

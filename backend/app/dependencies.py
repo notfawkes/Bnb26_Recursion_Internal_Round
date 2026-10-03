@@ -1,7 +1,5 @@
-from typing import Generator
 from fastapi import Depends
 from app.config import settings
-from app.storage.database import db, Database
 from app.services.mock_builder_manager import MockBuilderManager
 from app.services.blockchain_service import MockBlockchainService, AnvilBlockchainService
 from app.interfaces.builder_manager import BuilderManager
@@ -12,11 +10,6 @@ from app.services.release_service import ReleaseService
 mock_builder_manager = MockBuilderManager()
 mock_blockchain_service = MockBlockchainService()
 anvil_blockchain_service = AnvilBlockchainService()
-
-
-def get_db() -> Database:
-    """Dependency for DB storage access."""
-    return db
 
 
 def get_builder_manager() -> BuilderManager:
@@ -39,13 +32,11 @@ def get_blockchain_service() -> BlockchainService:
 
 
 def get_release_service(
-    database: Database = Depends(get_db),
     builder_mgr: BuilderManager = Depends(get_builder_manager),
     blockchain_svc: BlockchainService = Depends(get_blockchain_service)
 ) -> ReleaseService:
     """Dependency injection for ReleaseService."""
     return ReleaseService(
-        db=database,
         builder_manager=builder_mgr,
         blockchain_service=blockchain_svc
     )

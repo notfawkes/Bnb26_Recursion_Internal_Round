@@ -19,13 +19,16 @@ class MockBuilderManager:
         self._scenario: str = "NORMAL"  # NORMAL, ONE_DISAGREE, STRICT_DISAGREE, WRONG_QUORUM, INVALID_SIGNATURE
         self._custom_response: Optional[BuilderManagerResponse] = None
         self._override_published_hash: Optional[str] = None
+        self._override_artifact_name: Optional[str] = None
 
-    def set_scenario(self, scenario: str, published_hash: Optional[str] = None) -> None:
+    def set_scenario(self, scenario: str, published_hash: Optional[str] = None, artifact_name: Optional[str] = None) -> None:
         """Sets the active mock build scenario."""
         self._scenario = scenario.upper()
         self._custom_response = None
         if published_hash:
             self._override_published_hash = published_hash
+        if artifact_name:
+            self._override_artifact_name = artifact_name
 
     def set_custom_response(self, response: BuilderManagerResponse) -> None:
         """Injects a custom response directly."""
@@ -57,7 +60,7 @@ class MockBuilderManager:
 
         builder_results: List[BuilderResult] = []
         timestamp = datetime.datetime.now(datetime.timezone.utc).isoformat()
-        artifact_name = "safecalc.tar.gz"
+        artifact_name = self._override_artifact_name or "safecalc.tar.gz"
 
         for i, b_id in enumerate(builder_ids):
             keypair = builder_registry.get_test_keypair(b_id)
