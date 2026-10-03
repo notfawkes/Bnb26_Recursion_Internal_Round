@@ -1,6 +1,7 @@
 from fastapi import Depends
 from app.config import settings
 from app.services.mock_builder_manager import MockBuilderManager
+from app.services.real_builder_manager import RealBuilderManager
 from app.services.blockchain_service import MockBlockchainService, AnvilBlockchainService
 from app.interfaces.builder_manager import BuilderManager
 from app.interfaces.blockchain import BlockchainService
@@ -8,6 +9,7 @@ from app.services.release_service import ReleaseService
 
 # Global service singletons
 mock_builder_manager = MockBuilderManager()
+real_builder_manager = RealBuilderManager()
 mock_blockchain_service = MockBlockchainService()
 anvil_blockchain_service = AnvilBlockchainService()
 
@@ -15,10 +17,11 @@ anvil_blockchain_service = AnvilBlockchainService()
 def get_builder_manager() -> BuilderManager:
     """
     Dependency for BuilderManager.
-    Defaults to MockBuilderManager for Person 3 testing/dev.
-    Replaceable by Person 2's real Builder Manager implementation.
+    Switches between Mock and Real based on settings.USE_MOCK_BUILDERS.
     """
-    return mock_builder_manager
+    if settings.USE_MOCK_BUILDERS:
+        return mock_builder_manager
+    return real_builder_manager
 
 
 def get_blockchain_service() -> BlockchainService:
