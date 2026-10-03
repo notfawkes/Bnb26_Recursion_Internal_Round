@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, Field
 from app.schemas.builder import BuilderInfo, BuildInfo, ResultInfo
 
@@ -36,7 +36,9 @@ class BuilderResult(BaseModel):
     status: str = Field(default="SUCCESS", description="Build result status (SUCCESS or FAILURE)")
     artifact_name: str
     artifact_sha256: str
-    attestation: Attestation
+    attestation: Optional[Attestation] = None
+    signed_attestation: Optional[Dict[str, Any]] = None
+    error_code: Optional[str] = None
 
 
 class BuilderManagerResponse(BaseModel):
