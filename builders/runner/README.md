@@ -1,4 +1,4 @@
-# Single-builder demo (Steps 2–4)
+# Builder demo (Steps 2–9)
 
 Run these commands from the repository root with Docker Desktop running:
 
@@ -7,6 +7,20 @@ docker build -f builders/runner/Dockerfile -t quorum-python-package-v1:local bui
 .venv/Scripts/python.exe -m builders.manager.cli keygen --builder-id builder-a
 .venv/Scripts/python.exe -m builders.manager.cli build-one --request builders/runner/demo-request.json --builder-id builder-a --private-key builders/keys/builder-a-key-v1.pem
 ```
+
+To exercise the complete three-builder workflow, generate a separate keypair for
+each builder and run `build-all`:
+
+```powershell
+.venv/Scripts/python.exe -m builders.manager.cli keygen --builder-id builder-a
+.venv/Scripts/python.exe -m builders.manager.cli keygen --builder-id builder-b
+.venv/Scripts/python.exe -m builders.manager.cli keygen --builder-id builder-c
+.venv/Scripts/python.exe -m builders.manager.cli build-all --request builders/runner/demo-request.json --key-dir builders/keys --output-root builders/output
+```
+
+Key generation refuses to overwrite an existing key, so skip a `keygen` command
+when that builder's local key already exists. The combined result is stored under
+`builders/output/<release-id>/orchestrations/<job-id>/combined-result.json`.
 
 The demo request pins the public [PyPA sampleproject](https://github.com/pypa/sampleproject) at one full commit. The manager fetches that commit and checks `HEAD`, passes its commit timestamp as `SOURCE_DATE_EPOCH`, builds one wheel in Docker, saves the wheel and logs under ignored `builders/output/`, hashes the exact wheel bytes, and writes a signed attestation. The signing key stays under ignored `builders/keys/` and is **not** mounted into the container. Re-running `keygen` refuses to overwrite an existing key.
 
@@ -28,3 +42,6 @@ For V1, the Artifact Collector accepts exactly one non-empty regular wheel match
 The Docker image must be built before running the request. Its Python base image is pinned by digest and all installed Python build tools are version-pinned. At runtime the source repository has no network access, only the source checkout (read-only) and artifact output folder (read-write) are mounted, and CPU, memory, process count and time are limited. The configuration and image are builder-owned; the request cannot supply a shell command or loosen limits.
 
 This is a hackathon prototype, not a production sandbox or three independent trust authorities. The image itself has not been independently attested, package hashes are not locked, and Docker containers on one host share that host's trust boundary. Do not run untrusted repositories on a sensitive machine. Backend transport, a trusted public-key registry and quorum decisions are future integration work.
+
+Read `docs/builder-engineer-handoff.md` for the complete architecture, setup,
+verified three-builder evidence, teammate responsibilities and limitations.
