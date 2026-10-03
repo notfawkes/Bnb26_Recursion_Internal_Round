@@ -4,7 +4,13 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "build": "hardhat compile",
+    "compile": "hardhat compile",
+    "test": "hardhat test mocha",
+    "deploy": "hardhat run scripts/deploy.ts --network localhost",
+    "deploy:anvil": "hardhat run scripts/deploy.ts --network anvil",
+    "export-abi": "hardhat run scripts/export-abi.ts",
+    "example": "hardhat run scripts/example-flow.ts --network localhost"
   },
   "keywords": [],
   "author": "",
