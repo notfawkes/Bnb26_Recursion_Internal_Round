@@ -1,9 +1,12 @@
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
+
+import pytest
+from docker.errors import ImageNotFound
 
 from builders.manager.config import APPROVED_BUILD_CONFIGS
-from builders.manager.executor import execute_build
+from builders.manager.executor import BuildExecutionError, execute_build
 
 
 def test_docker_build_has_isolation_and_no_key_mount(tmp_path: Path) -> None:
@@ -60,3 +63,43 @@ def test_failed_build_returns_failure(tmp_path: Path) -> None:
     assert result.status == "BUILD_FAILED"
     assert result.exit_code == 2
     assert "build failed" in result.log
+
+
+def test_timeout_kills_container(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    container = Mock()
+    container.status = "running"
+    container.logs.return_value = b"still building"
+    client = Mock()
+    client.images.get.return_value = SimpleNamespace(id="sha256:test-image")
+    client.containers.run.return_value = container
+
+    with patch("builders.manager.executor.time.monotonic", side_effect=[0, 301]):
+        result = execute_build(
+            source,
+            tmp_path / "dist",
+            APPROVED_BUILD_CONFIGS["python-package-v1"],
+            source_date_epoch=1700000000,
+            client=client,
+        )
+
+    assert result.status == "BUILD_TIMEOUT"
+    container.kill.assert_called_once()
+    container.remove.assert_called_once_with(force=True)
+
+
+def test_missing_image_is_reported(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    client = Mock()
+    client.images.get.side_effect = ImageNotFound("no image")
+
+    with pytest.raises(BuildExecutionError, match="image"):
+        execute_build(
+            source,
+            tmp_path / "dist",
+            APPROVED_BUILD_CONFIGS["python-package-v1"],
+            source_date_epoch=1700000000,
+            client=client,
+        )

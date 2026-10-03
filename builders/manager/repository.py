@@ -1,5 +1,6 @@
 """Fetch an approved repository at an exact commit without running its code."""
 
+import os
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -31,9 +32,30 @@ def fetch_repository(
     destination.mkdir(parents=True)
 
     log_lines: list[str] = []
+    environment = {
+        key: value for key, value in os.environ.items() if not key.startswith("GIT_")
+    }
+    environment.update(
+        {
+            "GIT_CONFIG_NOSYSTEM": "1",
+            "GIT_CONFIG_GLOBAL": os.devnull,
+            "GIT_TERMINAL_PROMPT": "0",
+            "GIT_LFS_SKIP_SMUDGE": "1",
+            "GIT_NO_REPLACE_OBJECTS": "1",
+        }
+    )
 
     def git(*args: str) -> str:
-        command = ["git", "-C", str(destination), *args]
+        command = [
+            "git",
+            "-C",
+            str(destination),
+            "-c",
+            "protocol.allow=never",
+            "-c",
+            "protocol.https.allow=always",
+            *args,
+        ]
         try:
             result = subprocess.run(
                 command,
@@ -43,6 +65,7 @@ def fetch_repository(
                 errors="replace",
                 check=False,
                 timeout=timeout_seconds,
+                env=environment,
             )
         except subprocess.TimeoutExpired as exc:
             raise RepositoryFetchError("Git operation timed out") from exc

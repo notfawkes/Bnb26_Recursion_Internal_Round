@@ -38,6 +38,8 @@ def test_fetch_pins_and_verifies_exact_commit(
     assert "--depth=1" in fetch_command
     assert builder_request.commit_sha in fetch_command
     assert "http.followRedirects=false" in fetch_command
+    assert "protocol.allow=never" in fetch_command
+    assert run.call_args_list[2].kwargs["env"]["GIT_CONFIG_NOSYSTEM"] == "1"
     assert run.call_args_list[3].args[0][-2:] == ["--detach", "FETCH_HEAD"]
 
 

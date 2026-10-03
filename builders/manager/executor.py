@@ -22,6 +22,11 @@ class ExecutionResult:
     image_id: str
 
 
+def _limited_logs(container: object) -> str:
+    raw = container.logs(stdout=True, stderr=True, tail=1000)
+    return raw[-1_000_000:].decode("utf-8", "replace")
+
+
 def execute_build(
     source_dir: Path,
     output_dir: Path,
@@ -71,6 +76,7 @@ def execute_build(
                 "SOURCE_DATE_EPOCH": str(source_date_epoch),
                 "TZ": "UTC",
             },
+            use_config_proxy=False,
             volumes={
                 str(source_dir.resolve()): {"bind": "/src", "mode": "ro"},
                 str(output_dir.resolve()): {"bind": "/out", "mode": "rw"},
@@ -88,7 +94,7 @@ def execute_build(
             return ExecutionResult(
                 status="BUILD_TIMEOUT",
                 exit_code=None,
-                log=container.logs(stdout=True, stderr=True).decode("utf-8", "replace"),
+                log=_limited_logs(container),
                 image_id=image.id,
             )
 
@@ -96,7 +102,7 @@ def execute_build(
         return ExecutionResult(
             status="SUCCESS" if exit_code == 0 else "BUILD_FAILED",
             exit_code=exit_code,
-            log=container.logs(stdout=True, stderr=True).decode("utf-8", "replace"),
+            log=_limited_logs(container),
             image_id=image.id,
         )
     except DockerException as exc:
