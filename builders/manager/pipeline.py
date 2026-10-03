@@ -6,13 +6,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from uuid import uuid4
 
-from builders.manager.artifact import ArtifactError, collect_and_hash_artifact
+from builders.manager.artifact import ArtifactError, collect_artifact
 from builders.manager.attestation import make_attestation
 from builders.manager.executor import (
     BuildExecutionError,
     ExecutionResult,
     execute_build,
 )
+from builders.manager.hashing import sha256_file
 from builders.manager.repository import (
     FetchedSource,
     RepositoryFetchError,
@@ -37,6 +38,7 @@ class BuilderOutcome:
     job_directory: str
     artifact_hash: str | None = None
     artifact_path: str | None = None
+    artifact_manifest: dict[str, object] | None = None
     signed_attestation: dict[str, object] | None = None
     error_code: str | None = None
 
@@ -101,7 +103,7 @@ def run_single_builder(
         )
 
     try:
-        artifact = collect_and_hash_artifact(
+        collected_artifact = collect_artifact(
             job_dir, request.build_config.artifact_glob
         )
     except ArtifactError:
@@ -110,6 +112,11 @@ def run_single_builder(
             error_code="MISSING_OR_AMBIGUOUS_ARTIFACT",
             **outcome_fields,
         )
+    artifact = sha256_file(collected_artifact)
+    manifest = artifact.manifest()
+    (job_dir / "artifact-manifest.json").write_text(
+        json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8"
+    )
 
     attestation = make_attestation(
         request,
@@ -132,6 +139,7 @@ def run_single_builder(
         status="SUCCESS",
         artifact_hash=artifact.digest,
         artifact_path=str(artifact.path),
+        artifact_manifest=manifest,
         signed_attestation=envelope,
         **outcome_fields,
     )

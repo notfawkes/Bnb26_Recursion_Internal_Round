@@ -49,6 +49,16 @@ def test_single_builder_produces_verifiable_signed_evidence(tmp_path: Path) -> N
 
     assert outcome.status == "SUCCESS"
     assert outcome.artifact_hash == sha256(b"deterministic wheel").hexdigest()
+    assert outcome.artifact_manifest == {
+        "artifact": {
+            "path": "dist/demo-1.0-py3-none-any.whl",
+            "size_bytes": len(b"deterministic wheel"),
+        },
+        "hash": {
+            "algorithm": "sha256",
+            "digest": outcome.artifact_hash,
+        },
+    }
     assert outcome.signed_attestation is not None
     assert verify_attestation_signature(
         outcome.signed_attestation, keys.public_path.read_bytes()
@@ -65,6 +75,10 @@ def test_single_builder_produces_verifiable_signed_evidence(tmp_path: Path) -> N
         (job_dir / "signed-attestation.json").read_text(encoding="utf-8")
     )
     assert saved == outcome.signed_attestation
+    saved_manifest = json.loads(
+        (job_dir / "artifact-manifest.json").read_text(encoding="utf-8")
+    )
+    assert saved_manifest == outcome.artifact_manifest
 
 
 def test_failed_build_has_no_success_attestation(tmp_path: Path) -> None:

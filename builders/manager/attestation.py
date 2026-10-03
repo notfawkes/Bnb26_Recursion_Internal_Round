@@ -1,6 +1,6 @@
 """Describe what one builder actually produced; do not decide quorum trust."""
 
-from builders.manager.artifact import HashedArtifact
+from builders.manager.hashing import HashedArtifact
 from builders.manager.request_validator import ValidatedBuilderRequest
 
 SCHEMA_VERSION = "1.0"

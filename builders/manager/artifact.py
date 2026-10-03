@@ -1,11 +1,9 @@
-"""Select exactly one approved build artifact and hash its bytes."""
+"""Select exactly one approved build artifact from a completed job."""
 
-import hashlib
 from dataclasses import dataclass
 from pathlib import Path
 
 MAX_ARTIFACT_BYTES = 100 * 1024 * 1024
-HASH_CHUNK_BYTES = 1024 * 1024
 
 
 class ArtifactError(RuntimeError):
@@ -13,26 +11,16 @@ class ArtifactError(RuntimeError):
 
 
 @dataclass(frozen=True)
-class HashedArtifact:
+class CollectedArtifact:
     path: Path
     relative_path: str
     size_bytes: int
-    algorithm: str
-    digest: str
 
 
-def hash_artifact(path: Path) -> str:
-    """Hash file contents incrementally, not the filename or path."""
-    digest = hashlib.sha256()
-    with path.open("rb") as stream:
-        while chunk := stream.read(HASH_CHUNK_BYTES):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
-def collect_and_hash_artifact(
+def collect_artifact(
     job_dir: Path, artifact_glob: str, *, max_bytes: int = MAX_ARTIFACT_BYTES
-) -> HashedArtifact:
+) -> CollectedArtifact:
+    """Return the one regular file selected by the approved configuration."""
     matches = list(job_dir.glob(artifact_glob))
     if len(matches) != 1:
         raise ArtifactError(f"expected one artifact; found {len(matches)}")
@@ -50,10 +38,8 @@ def collect_and_hash_artifact(
     if size_bytes <= 0 or size_bytes > max_bytes:
         raise ArtifactError("artifact size is outside the allowed range")
 
-    return HashedArtifact(
+    return CollectedArtifact(
         path=path,
         relative_path=path.relative_to(job_dir).as_posix(),
         size_bytes=size_bytes,
-        algorithm="sha256",
-        digest=hash_artifact(path),
     )
