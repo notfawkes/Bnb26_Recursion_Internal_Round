@@ -1,0 +1,37 @@
+# Local project notes
+/conversation.md
+/progress.md
+
+# Python environments and caches
+/.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Build and dependency output
+dist/
+build/
+*.egg-info/
+node_modules/
+.next/
+out/
+artifacts/
+cache/
+broadcast/
+
+# Editors and operating systems
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
