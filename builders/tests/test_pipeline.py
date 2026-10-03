@@ -49,6 +49,7 @@ def test_single_builder_produces_verifiable_signed_evidence(tmp_path: Path) -> N
 
     assert outcome.status == "SUCCESS"
     assert outcome.artifact_hash == sha256(b"deterministic wheel").hexdigest()
+    assert outcome.public_key_id == "builder-a-key-v1"
     assert outcome.artifact_manifest == {
         "artifact": {
             "path": "dist/demo-1.0-py3-none-any.whl",
