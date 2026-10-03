@@ -6,6 +6,7 @@ import sys
 from dataclasses import asdict
 from pathlib import Path
 
+from builders.manager.orchestrator import run_all_builders
 from builders.manager.pipeline import run_single_builder
 from builders.manager.request_validator import RequestValidationError
 from builders.manager.signing import generate_development_keypair
@@ -25,6 +26,13 @@ def main(argv: list[str] | None = None) -> int:
     build_one.add_argument("--private-key", required=True, type=Path)
     build_one.add_argument("--output-root", type=Path, default=Path("builders/output"))
 
+    build_all = commands.add_parser(
+        "build-all", help="run every builder and collect one combined result"
+    )
+    build_all.add_argument("--request", required=True, type=Path)
+    build_all.add_argument("--key-dir", type=Path, default=Path("builders/keys"))
+    build_all.add_argument("--output-root", type=Path, default=Path("builders/output"))
+
     args = parser.parse_args(argv)
     try:
         if args.command == "keygen":
@@ -35,6 +43,11 @@ def main(argv: list[str] | None = None) -> int:
             return 0
 
         payload = json.loads(args.request.read_text(encoding="utf-8"))
+        if args.command == "build-all":
+            outcome = run_all_builders(payload, args.output_root, args.key_dir)
+            print(json.dumps(asdict(outcome), indent=2, ensure_ascii=False))
+            return 0 if outcome.summary.failed_builds == 0 else 1
+
         outcome = run_single_builder(
             payload, args.builder_id, args.output_root, args.private_key
         )

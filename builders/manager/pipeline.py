@@ -1,6 +1,7 @@
 """Run one validated builder and return evidence, never a quorum decision."""
 
 import json
+import re
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -28,6 +29,7 @@ from builders.manager.signing import sign_attestation
 
 FetchFunction = Callable[[ValidatedBuilderRequest, Path], FetchedSource]
 ExecuteFunction = Callable[..., ExecutionResult]
+JOB_ID_PATTERN = re.compile(r"[0-9a-f]{32}")
 
 
 @dataclass(frozen=True)
@@ -39,6 +41,7 @@ class BuilderOutcome:
     artifact_hash: str | None = None
     artifact_path: str | None = None
     artifact_manifest: dict[str, object] | None = None
+    public_key_id: str | None = None
     signed_attestation: dict[str, object] | None = None
     error_code: str | None = None
 
@@ -51,6 +54,7 @@ def run_single_builder(
     *,
     fetcher: FetchFunction = fetch_repository,
     executor: ExecuteFunction = execute_build,
+    job_id: str | None = None,
 ) -> BuilderOutcome:
     """Fetch, build, hash and sign one builder's result.
 
@@ -61,7 +65,14 @@ def run_single_builder(
     if builder_id not in request.builders:
         raise RequestValidationError("builder_id is not part of this request")
 
-    job_dir = output_root.resolve() / str(request.release_id) / builder_id / uuid4().hex
+    effective_job_id = job_id or uuid4().hex
+    if JOB_ID_PATTERN.fullmatch(effective_job_id) is None:
+        raise RequestValidationError(
+            "job_id must be 32 lowercase hexadecimal characters"
+        )
+    job_dir = (
+        output_root.resolve() / str(request.release_id) / builder_id / effective_job_id
+    )
     job_dir.mkdir(parents=True, exist_ok=False)
     outcome_fields = {
         "release_id": str(request.release_id),
@@ -140,6 +151,7 @@ def run_single_builder(
         artifact_hash=artifact.digest,
         artifact_path=str(artifact.path),
         artifact_manifest=manifest,
+        public_key_id=f"{builder_id}-key-v1",
         signed_attestation=envelope,
         **outcome_fields,
     )

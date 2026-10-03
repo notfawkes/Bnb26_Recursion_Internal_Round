@@ -15,7 +15,8 @@ from builders.manager.config import (
 REQUIRED_FIELDS = frozenset(
     {"release_id", "repository_url", "commit_sha", "build_config_id", "builders"}
 )
-BUILDER_IDS = frozenset({"builder-a", "builder-b", "builder-c"})
+BUILDER_ORDER = ("builder-a", "builder-b", "builder-c")
+BUILDER_IDS = frozenset(BUILDER_ORDER)
 REPOSITORY_URL = re.compile(r"https://github\.com/([A-Za-z0-9_.-]+)/([A-Za-z0-9_.-]+)")
 COMMIT_SHA = re.compile(r"[0-9a-f]{40}")
 
