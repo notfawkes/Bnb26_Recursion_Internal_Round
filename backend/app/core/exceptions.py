@@ -42,6 +42,11 @@ class BlockchainServiceError(QuorumException):
         super().__init__(message, status_code=500)
 
 
+class BlockchainUnavailableError(QuorumException):
+    def __init__(self, message: str = "Blockchain service is unavailable."):
+        super().__init__(message, status_code=503)
+
+
 class BuilderServiceError(QuorumException):
     def __init__(self, message: str):
         super().__init__(message, status_code=500)
