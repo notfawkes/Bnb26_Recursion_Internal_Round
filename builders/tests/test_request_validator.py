@@ -112,6 +112,8 @@ def test_config_without_valid_limits_is_rejected(
 ) -> None:
     invalid_configs = {
         "python-package-v1": BuildConfiguration(
+            image="quorum-python-package-v1:local",
+            command=("python", "-m", "build"),
             artifact_glob="dist/*.whl",
             limits=ResourceLimits(timeout_seconds=0, cpu_count=1, memory_mb=512),
         )

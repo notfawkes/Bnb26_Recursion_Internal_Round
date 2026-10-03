@@ -14,6 +14,8 @@ class ResourceLimits:
 
 @dataclass(frozen=True)
 class BuildConfiguration:
+    image: str
+    command: tuple[str, ...]
     artifact_glob: str
     limits: ResourceLimits
 
@@ -21,6 +23,12 @@ class BuildConfiguration:
 APPROVED_BUILD_CONFIGS: Mapping[str, BuildConfiguration] = MappingProxyType(
     {
         "python-package-v1": BuildConfiguration(
+            image="quorum-python-package-v1:local",
+            command=(
+                "sh",
+                "-c",
+                "mkdir -p /tmp/work && cp -a /src/. /tmp/work/ && python -m build --wheel --no-isolation --outdir /out /tmp/work",
+            ),
             artifact_glob="dist/*.whl",
             limits=ResourceLimits(
                 timeout_seconds=300,

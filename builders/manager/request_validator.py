@@ -38,6 +38,15 @@ def _validated_configuration(config: object) -> BuildConfiguration:
     if not isinstance(config, BuildConfiguration):
         raise RequestValidationError("build configuration is not defined")
 
+    if not isinstance(config.image, str) or not config.image:
+        raise RequestValidationError("build configuration has no runtime image")
+    if (
+        not isinstance(config.command, tuple)
+        or not config.command
+        or not all(isinstance(part, str) and part for part in config.command)
+    ):
+        raise RequestValidationError("build configuration has no approved command")
+
     artifact = config.artifact_glob
     if (
         not isinstance(artifact, str)
