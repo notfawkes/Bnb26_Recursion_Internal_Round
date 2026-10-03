@@ -1,0 +1,137 @@
+:root {
+  /* Neutral Elegance Palette Base */
+  --color-light-beige: #FFDBBB;
+  --color-warm-gray: #CCBEB1;
+  --color-muted-brown: #997E67;
+  --color-dark-brown: #664930;
+
+  /* Light Theme (Clean Warm Linen / Porcelain) */
+  --bg-primary: #F8F6F2;
+  --bg-surface: #EFEBE4;
+  --bg-card: #FFFFFF;
+  --bg-card-muted: #F4EFEA;
+  --border-color: #D8CFBE;
+  --border-subtle: #EAE3D6;
+  --border-active: #664930;
+  
+  --text-primary: #291E16;
+  --text-secondary: #573E2B;
+  --text-muted: #8A7563;
+
+  --brand-color: #664930;
+  --flow-line: #664930;
+
+  --btn-primary-bg: #664930;
+  --btn-primary-text: #FFDBBB;
+  --btn-primary-border: #664930;
+
+  --badge-bg: #EFE8E1;
+  --badge-text: #664930;
+  --badge-border: #CCBEB1;
+
+  --success-color: #2D6A4F;
+  --success-bg: #EAF4EE;
+  --success-border: #A3D2BA;
+
+  --danger-color: #B23A2B;
+  --danger-bg: #FDF0EE;
+  --danger-border: #E8ADA4;
+
+  --warning-color: #A05E1C;
+  --warning-bg: #FDF5EA;
+  --warning-border: #E2C79A;
+
+  --shadow-sm: 0 1px 3px rgba(102, 73, 48, 0.06);
+  --shadow-md: 0 4px 14px rgba(102, 73, 48, 0.08);
+  --shadow-lg: 0 12px 28px rgba(102, 73, 48, 0.12);
+
+  --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+
+  --radius-sm: 5px;
+  --radius-md: 9px;
+  --radius-lg: 14px;
+}
+
+[data-theme="dark"] {
+  /* Premium Obsidian & Warm Champagne Developer Theme */
+  --bg-primary: #0A0D12;
+  --bg-surface: #12161F;
+  --bg-card: #151A24;
+  --bg-card-muted: #1A212D;
+  --border-color: #262F3E;
+  --border-subtle: #1C2330;
+  --border-active: #FFDBBB;
+
+  --text-primary: #F3F4F6;
+  --text-secondary: #FFDBBB;
+  --text-muted: #8E98A8;
+
+  --brand-color: #FFDBBB;
+  --flow-line: #FFDBBB;
+
+  --btn-primary-bg: #FFDBBB;
+  --btn-primary-text: #11141A;
+  --btn-primary-border: #FFDBBB;
+
+  --badge-bg: #1B212D;
+  --badge-text: #FFDBBB;
+  --badge-border: #2D374A;
+
+  --success-color: #4ADE80;
+  --success-bg: #0F2317;
+  --success-border: #1E462E;
+
+  --danger-color: #F87171;
+  --danger-bg: #291214;
+  --danger-border: #522024;
+
+  --warning-color: #FBBF24;
+  --warning-bg: #261B0B;
+  --warning-border: #543912;
+
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.5);
+  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.7);
+}
+
+/* Animations */
+@keyframes flowDash {
+  0% {
+    stroke-dashoffset: 24;
+  }
+  100% {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes pulseDot {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.4;
+    transform: scale(1.2);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-flow {
+  stroke-dasharray: 6 6;
+  animation: flowDash 1.1s linear infinite;
+}
+
+.fade-in {
+  animation: fadeIn 0.35s ease-out forwards;
+}
