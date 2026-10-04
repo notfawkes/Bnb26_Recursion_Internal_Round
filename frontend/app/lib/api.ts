@@ -272,6 +272,7 @@ export interface BuilderModel {
 export async function listReleases(): Promise<CreateReleaseResponse[]> {
   const res = await fetch(`${API_BASE}/api/v1/releases`, {
     method: "GET",
+    signal: AbortSignal.timeout(10_000),
   });
 
   if (!res.ok) {
@@ -285,6 +286,7 @@ export async function listReleases(): Promise<CreateReleaseResponse[]> {
 export async function fetchBuilders(): Promise<BuilderModel[]> {
   const res = await fetch(`${API_BASE}/api/v1/builders`, {
     method: "GET",
+    signal: AbortSignal.timeout(10_000),
   });
 
   if (!res.ok) {
