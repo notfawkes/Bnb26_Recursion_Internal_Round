@@ -17,6 +17,10 @@ import {
   Copy,
   Check,
   RefreshCw,
+  Search,
+  Hash,
+  Terminal,
+  Package,
 } from "lucide-react";
 import Sidebar from "./components/Sidebar";
 import VerificationsView, { VerificationCardItem } from "./components/VerificationsView";
@@ -33,6 +37,11 @@ import {
   fetchBuilders,
   VerificationResponse,
   BuilderModel,
+  BuilderVerificationDetail,
+  BuilderAuditLogEntry,
+  ArtifactDetectionResponse,
+  detectArtifact,
+  generateArtifactHash,
 } from "./lib/api";
 
 // 5 progress steps required by the protocol
@@ -71,6 +80,7 @@ export interface ReleaseItem {
   createTx?: string;
   attestationTxs?: string[];
   finalizeTx?: string;
+  buildConfigId: string;
   builderConfigurations: {
     name: string;
     type: string;
@@ -78,6 +88,7 @@ export interface ReleaseItem {
     attestationSig: string;
     status: "Match ✓" | "Disagree" | "Invalid" | "Pending";
     wallet?: string;
+    logs?: BuilderAuditLogEntry[];
   }[];
 }
 
@@ -94,6 +105,10 @@ export default function DashboardPage() {
   const [commitHash, setCommitHash] = useState("");
   const [publishedHash, setPublishedHash] = useState("");
   const [artifactName, setArtifactName] = useState("sampleproject-3.0.0-py3-none-any.whl");
+  const [buildConfigId, setBuildConfigId] = useState("python-package-v1");
+  const [detectedArtifact, setDetectedArtifact] = useState<ArtifactDetectionResponse | null>(null);
+  const [artifactAction, setArtifactAction] = useState<"idle" | "detecting" | "detected" | "hashing" | "hashed">("idle");
+  const [artifactActionError, setArtifactActionError] = useState<string | null>(null);
   const [quorumPolicy, setQuorumPolicy] = useState("2 of 3 Consensus");
 
   // 3. Verification Execution states
@@ -143,6 +158,26 @@ export default function DashboardPage() {
   // 6. Modal state for detailed analysis
   const [activeModalRelease, setActiveModalRelease] = useState<ReleaseItem | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [expandedLogBuilder, setExpandedLogBuilder] = useState<string | null>(null);
+
+  const verificationBuildersToCards = (
+    details: BuilderVerificationDetail[]
+  ): ReleaseItem["builderConfigurations"] =>
+    details.map((detail, index) => ({
+      name: `Builder #${index + 1} (${detail.builder_id})`,
+      type: `Docker Hermetic Container • ${detail.builder_id}-key-v1`,
+      resultHash: detail.artifact_sha256,
+      attestationSig: detail.signature_valid
+        ? `Ed25519 Verified ✓ (${detail.builder_id}-key-v1)`
+        : "Signature invalid",
+      status:
+        detail.status_detail === "AGREE"
+          ? ("Match ✓" as const)
+          : detail.status_detail === "DISAGREE"
+          ? ("Disagree" as const)
+          : ("Invalid" as const),
+      logs: detail.logs || [],
+    }));
 
   const handleCopy = (text: string, key: string) => {
     navigator.clipboard.writeText(text);
@@ -183,6 +218,7 @@ export default function DashboardPage() {
           createTx: (r as any).create_release_tx,
           attestationTxs: (r as any).attestation_txs,
           finalizeTx: (r as any).finalize_tx,
+          buildConfigId: r.build_config_id || "python-package-v1",
           builderConfigurations: [],
         };
       });
@@ -237,20 +273,64 @@ export default function DashboardPage() {
   const [isModalVerifying, setIsModalVerifying] = useState(false);
   const [modalVerifyError, setModalVerifyError] = useState<string | null>(null);
 
+  const handleDetectArtifact = async (event: React.MouseEvent) => {
+    event.stopPropagation();
+    if (!githubUrl.trim() || !commitHash.trim()) return;
+    setArtifactAction("detecting");
+    setArtifactActionError(null);
+    setDetectedArtifact(null);
+    try {
+      const result = await detectArtifact(githubUrl.trim(), commitHash.trim());
+      setDetectedArtifact(result);
+      setArtifactName(result.artifact.name);
+      setBuildConfigId(result.build_config_id);
+      setPublishedHash("");
+      setArtifactAction("detected");
+    } catch (error) {
+      setArtifactAction("idle");
+      setArtifactActionError(
+        error instanceof Error ? error.message : "Artifact detection failed"
+      );
+    }
+  };
+
+  const handleGenerateArtifactHash = async (event: React.MouseEvent) => {
+    event.stopPropagation();
+    if (!detectedArtifact) return;
+    setArtifactAction("hashing");
+    setArtifactActionError(null);
+    try {
+      const result = await generateArtifactHash(
+        githubUrl.trim(),
+        commitHash.trim(),
+        detectedArtifact.artifact.path
+      );
+      setArtifactName(result.artifact.name);
+      setPublishedHash(result.digest);
+      setArtifactAction("hashed");
+    } catch (error) {
+      setArtifactAction("detected");
+      setArtifactActionError(
+        error instanceof Error ? error.message : "SHA-256 generation failed"
+      );
+    }
+  };
+
   // Open modal with fresh on-chain data
   const handleOpenReleaseModal = async (rel: ReleaseItem) => {
     setActiveModalRelease(rel);
     setModalVerifyError(null);
 
     try {
-      const [fullRel, attestationsData] = await Promise.all([
+      const [fullRel, attestationsData, auditResult] = await Promise.all([
         getRelease(rel.id).catch(() => null),
         getReleaseAttestations(rel.id).catch(() => ({ count: 0, attestations: [] })),
+        getReleaseResult(rel.id).catch(() => null),
       ]);
 
       if (fullRel) {
         const atts = attestationsData?.attestations || [];
-        const builderConfigs = atts.map((att: any, idx: number) => {
+        const onChainBuilderConfigs = atts.map((att: any, idx: number) => {
           const rawWallet = (att.builder || "").toLowerCase();
           const builderId = WALLET_TO_BUILDER[rawWallet] || (idx === 0 ? "builder-a" : idx === 1 ? "builder-b" : "builder-c");
           const matches =
@@ -267,6 +347,9 @@ export default function DashboardPage() {
             wallet: att.builder,
           };
         });
+        const builderConfigs = auditResult?.builders?.length
+          ? verificationBuildersToCards(auditResult.builders)
+          : onChainBuilderConfigs;
 
         const updated: ReleaseItem = {
           ...rel,
@@ -275,6 +358,7 @@ export default function DashboardPage() {
           finalizeTx: (fullRel as any).finalize_tx || rel.finalizeTx,
           quorumHash: (fullRel as any).quorum_hash || rel.quorumHash,
           decisionSource: (fullRel as any).decision && (fullRel as any).decision !== "NONE" ? "BLOCKCHAIN" : rel.decisionSource,
+          buildConfigId: fullRel.build_config_id || rel.buildConfigId,
           verificationState:
             (fullRel as any).decision === "VERIFIED"
               ? "Verified"
@@ -300,7 +384,7 @@ export default function DashboardPage() {
     setModalVerifyError(null);
 
     try {
-      await verifyRelease(releaseId);
+      const verification = await verifyRelease(releaseId);
       await loadAllReleases();
 
       const [fullRel, attestationsData] = await Promise.all([
@@ -310,7 +394,7 @@ export default function DashboardPage() {
 
       if (fullRel) {
         const atts = attestationsData?.attestations || [];
-        const builderConfigs = atts.map((att: any, idx: number) => {
+        const onChainBuilderConfigs = atts.map((att: any, idx: number) => {
           const rawWallet = (att.builder || "").toLowerCase();
           const builderId = WALLET_TO_BUILDER[rawWallet] || (idx === 0 ? "builder-a" : idx === 1 ? "builder-b" : "builder-c");
           const matches =
@@ -327,6 +411,9 @@ export default function DashboardPage() {
             wallet: att.builder,
           };
         });
+        const builderConfigs = verification.builders.length
+          ? verificationBuildersToCards(verification.builders)
+          : onChainBuilderConfigs;
 
         setActiveModalRelease((prev) =>
           prev
@@ -343,6 +430,7 @@ export default function DashboardPage() {
                 createTx: (fullRel as any).create_release_tx || prev.createTx,
                 attestationTxs: (fullRel as any).attestation_txs || prev.attestationTxs,
                 finalizeTx: (fullRel as any).finalize_tx || prev.finalizeTx,
+                buildConfigId: verification.build_config_id || prev.buildConfigId,
                 builderConfigurations: builderConfigs,
               }
             : null
@@ -408,11 +496,12 @@ export default function DashboardPage() {
       const createdRelease = await createRelease({
         repository_url: githubUrl.trim(),
         commit_sha: commitHash.trim(),
-        build_config_id: "python-package-v1",
+        build_config_id: buildConfigId,
         published_hash: effectivePubHash,
         artifact_name: effectiveArtName,
         builder_count: 3,
         quorum_required: quorumRequired,
+        reuse_existing: true,
       });
 
       const releaseId = createdRelease.release_id;
@@ -464,6 +553,19 @@ export default function DashboardPage() {
 
       // Reload all releases directly from blockchain
       await loadAllReleases();
+      setAllReleases((previous) =>
+        previous.map((release) =>
+          release.id === releaseId
+            ? {
+                ...release,
+                buildConfigId: verifyResult.build_config_id,
+                builderConfigurations: verificationBuildersToCards(
+                  verifyResult.builders
+                ),
+              }
+            : release
+        )
+      );
       setIsCompleted(true);
     } catch (err: any) {
       console.error("Verification pipeline error:", err);
@@ -489,6 +591,10 @@ export default function DashboardPage() {
     setCommitHash("621e4974ca25ce531773def586ba3ed8e736b3fc");
     setPublishedHash("0d9a9a49b40160078387d2ec1c7a59d4135c3095b1b210d8c537ad9f7accafd1");
     setArtifactName("sampleproject-3.0.0-py3-none-any.whl");
+    setBuildConfigId("python-package-v1");
+    setDetectedArtifact(null);
+    setArtifactAction("idle");
+    setArtifactActionError(null);
     setQuorumPolicy("2 of 3 Consensus");
   };
 
@@ -697,7 +803,12 @@ export default function DashboardPage() {
                       type="text"
                       placeholder="https://github.com/organization/repository"
                       value={githubUrl}
-                      onChange={(e) => setGithubUrl(e.target.value)}
+                      onChange={(e) => {
+                        setGithubUrl(e.target.value);
+                        setDetectedArtifact(null);
+                        setArtifactAction("idle");
+                        setArtifactActionError(null);
+                      }}
                       onFocus={() => setIsFormExpanded(true)}
                       disabled={isVerifying}
                       className="w-full bg-black/70 border border-white/10 rounded-xl px-4 py-3.5 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-white/40 focus:ring-1 focus:ring-white/20 transition-all font-mono"
@@ -727,7 +838,12 @@ export default function DashboardPage() {
                             type="text"
                             placeholder="e.g. 621e4974ca25ce531773def586ba3ed8e736b3fc"
                             value={commitHash}
-                            onChange={(e) => setCommitHash(e.target.value)}
+                            onChange={(e) => {
+                              setCommitHash(e.target.value);
+                              setDetectedArtifact(null);
+                              setArtifactAction("idle");
+                              setArtifactActionError(null);
+                            }}
                             className="w-full bg-black/70 border border-white/10 rounded-xl px-4 py-3.5 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-white/40 focus:ring-1 focus:ring-white/20 transition-all font-mono"
                           />
                         </div>
@@ -786,6 +902,88 @@ export default function DashboardPage() {
                             className="w-full bg-black/70 border border-white/10 rounded-xl px-4 py-3 text-xs text-white placeholder-zinc-600 focus:outline-none focus:border-white/40 font-mono"
                           />
                         </div>
+                      </div>
+
+                      <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-black/60 p-5">
+                        {(artifactAction === "detecting" || artifactAction === "hashing") && (
+                          <motion.div
+                            className="absolute inset-y-0 w-32 bg-gradient-to-r from-transparent via-white/10 to-transparent pointer-events-none"
+                            initial={{ left: "-20%" }}
+                            animate={{ left: "110%" }}
+                            transition={{ duration: 1.1, repeat: Infinity, ease: "linear" }}
+                          />
+                        )}
+                        <div className="relative flex flex-col lg:flex-row lg:items-center justify-between gap-5">
+                          <div className="flex items-start gap-3 min-w-0">
+                            <div className="relative w-10 h-10 rounded-xl border border-white/15 bg-white/5 flex items-center justify-center shrink-0">
+                              {(artifactAction === "detecting" || artifactAction === "hashing") && (
+                                <span className="absolute inset-0 rounded-xl border border-white/40 animate-ping" />
+                              )}
+                              <Package className="w-4 h-4 text-white" />
+                            </div>
+                            <div className="min-w-0 space-y-1">
+                              <p className="text-xs font-mono uppercase tracking-wider text-zinc-300">
+                                Deterministic Artifact Automation
+                              </p>
+                              {detectedArtifact ? (
+                                <>
+                                  <p className="text-sm text-white font-semibold truncate">
+                                    {detectedArtifact.artifact.name}
+                                  </p>
+                                  <p className="text-[11px] text-zinc-500 font-mono break-all">
+                                    {detectedArtifact.project_type} • {detectedArtifact.build_config_id} • {detectedArtifact.artifact.path} • {detectedArtifact.artifact.size_bytes.toLocaleString()} bytes
+                                  </p>
+                                </>
+                              ) : (
+                                <p className="text-xs text-zinc-500">
+                                  Scan the pinned commit for a committed wheel, JAR, or npm package.
+                                </p>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="flex flex-col sm:flex-row gap-3 shrink-0">
+                            <motion.button
+                              type="button"
+                              onClick={handleDetectArtifact}
+                              disabled={!githubUrl.trim() || !commitHash.trim() || artifactAction === "detecting" || artifactAction === "hashing"}
+                              whileHover={{ scale: 1.02 }}
+                              whileTap={{ scale: 0.98 }}
+                              className="px-4 py-3 rounded-xl border border-white/15 bg-white/5 hover:bg-white/10 disabled:opacity-40 text-xs font-mono flex items-center justify-center gap-2 cursor-pointer"
+                            >
+                              <Search className={`w-4 h-4 ${artifactAction === "detecting" ? "animate-spin" : ""}`} />
+                              {artifactAction === "detecting" ? "Scanning commit..." : "Detect Artifact File"}
+                            </motion.button>
+                            <motion.button
+                              type="button"
+                              onClick={handleGenerateArtifactHash}
+                              disabled={!detectedArtifact || artifactAction === "detecting" || artifactAction === "hashing"}
+                              whileHover={{ scale: 1.02 }}
+                              whileTap={{ scale: 0.98 }}
+                              className="px-4 py-3 rounded-xl bg-white text-black disabled:bg-zinc-800 disabled:text-zinc-500 disabled:opacity-60 text-xs font-bold font-mono flex items-center justify-center gap-2 cursor-pointer"
+                            >
+                              <Hash className={`w-4 h-4 ${artifactAction === "hashing" ? "animate-spin" : ""}`} />
+                              {artifactAction === "hashing" ? "Hashing bytes..." : artifactAction === "hashed" ? "Fingerprint Generated ✓" : "Generate SHA Fingerprint"}
+                            </motion.button>
+                          </div>
+                        </div>
+
+                        {artifactActionError && (
+                          <p className="relative mt-4 text-xs text-red-300 font-mono flex items-center gap-2">
+                            <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                            {artifactActionError}
+                          </p>
+                        )}
+                        {artifactAction === "hashed" && (
+                          <motion.div
+                            initial={{ opacity: 0, y: 4 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            className="relative mt-4 rounded-xl border border-white/10 bg-zinc-950 px-4 py-3"
+                          >
+                            <p className="text-[10px] uppercase tracking-wider text-zinc-500 font-mono">SHA-256 fingerprint generated from exact artifact bytes</p>
+                            <p className="mt-1 text-xs text-white font-mono break-all">{publishedHash}</p>
+                          </motion.div>
+                        )}
                       </div>
 
                       {/* Verification Trigger Button */}
@@ -1031,7 +1229,9 @@ export default function DashboardPage() {
                                 Consensus Verdict: {latestVerificationResponse.decision} (Source: {latestVerificationResponse.decision_source})
                               </h4>
                               <p className="text-xs text-zinc-400">
-                                Verified on-chain via QuorumVerifier.sol • Decision finalized on Ethereum Anvil.
+                                {latestVerificationResponse.cache_hit
+                                  ? "Existing finalized proof reused instantly • Docker builders were not rerun."
+                                  : "Verified on-chain via QuorumVerifier.sol • Decision finalized on Ethereum Anvil."}
                               </p>
                             </div>
                           </div>
@@ -1366,7 +1566,7 @@ export default function DashboardPage() {
                     Builder Attestation Evidence Breakdown
                   </h4>
                   <span className="text-[11px] font-mono text-zinc-500">
-                    Standardized Spec: <code className="text-zinc-300 font-bold">python-package-v1</code> (Deterministic build)
+                    Standardized Spec: <code className="text-zinc-300 font-bold">{activeModalRelease.buildConfigId}</code> (Deterministic build)
                   </span>
                 </div>
 
@@ -1397,6 +1597,74 @@ export default function DashboardPage() {
                           Signature Status:{" "}
                           <span className="text-zinc-300">{builder.attestationSig}</span>
                         </div>
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setExpandedLogBuilder((current) =>
+                              current === `${activeModalRelease.id}-${idx}`
+                                ? null
+                                : `${activeModalRelease.id}-${idx}`
+                            )
+                          }
+                          className="w-full mt-2 px-4 py-2.5 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-zinc-200 flex items-center justify-between transition-colors cursor-pointer"
+                        >
+                          <span className="flex items-center gap-2">
+                            <Terminal className="w-3.5 h-3.5" />
+                            View Builder Logs
+                          </span>
+                          <ChevronRight
+                            className={`w-3.5 h-3.5 transition-transform ${
+                              expandedLogBuilder === `${activeModalRelease.id}-${idx}`
+                                ? "rotate-90"
+                                : ""
+                            }`}
+                          />
+                        </button>
+
+                        <AnimatePresence initial={false}>
+                          {expandedLogBuilder === `${activeModalRelease.id}-${idx}` && (
+                            <motion.div
+                              initial={{ opacity: 0, height: 0 }}
+                              animate={{ opacity: 1, height: "auto" }}
+                              exit={{ opacity: 0, height: 0 }}
+                              className="overflow-hidden"
+                            >
+                              <div className="mt-3 rounded-xl border border-white/10 bg-zinc-950 p-4 max-h-80 overflow-y-auto space-y-3">
+                                {builder.logs && builder.logs.length > 0 ? (
+                                  builder.logs.map((entry, logIndex) => (
+                                    <div
+                                      key={`${entry.timestamp}-${logIndex}`}
+                                      className="grid grid-cols-[82px_88px_1fr] gap-3 items-start text-[11px]"
+                                    >
+                                      <span className="text-zinc-600">
+                                        {new Date(entry.timestamp).toLocaleTimeString([], {
+                                          hour12: false,
+                                        })}
+                                      </span>
+                                      <span
+                                        className={`font-bold ${
+                                          entry.level === "ERROR"
+                                            ? "text-red-300"
+                                            : "text-zinc-300"
+                                        }`}
+                                      >
+                                        {entry.stage}
+                                      </span>
+                                      <span className="text-zinc-400 whitespace-pre-wrap break-all leading-relaxed">
+                                        {entry.message}
+                                      </span>
+                                    </div>
+                                  ))
+                                ) : (
+                                  <p className="text-zinc-500 text-center py-3">
+                                    Detailed off-chain logs are unavailable for this legacy or reconstructed release. The on-chain hashes remain available above.
+                                  </p>
+                                )}
+                              </div>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
                       </div>
                     ))}
                   </div>

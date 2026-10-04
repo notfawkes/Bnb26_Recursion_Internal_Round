@@ -13,6 +13,7 @@ export interface CreateReleasePayload {
   artifact_name?: string;
   builder_count?: number;
   quorum_required?: number;
+  reuse_existing?: boolean;
 }
 
 export interface CreateReleaseResponse {
@@ -28,6 +29,14 @@ export interface CreateReleaseResponse {
   quorum_required: number;
   status: string;
   created_at: string;
+  reused?: boolean;
+}
+
+export interface BuilderAuditLogEntry {
+  timestamp: string;
+  stage: string;
+  level: string;
+  message: string;
 }
 
 export interface BuilderVerificationDetail {
@@ -41,6 +50,7 @@ export interface BuilderVerificationDetail {
   commit_match: boolean;
   valid: boolean;
   status_detail: "AGREE" | "DISAGREE" | "INVALID";
+  logs: BuilderAuditLogEntry[];
 }
 
 export interface BlockchainRecord {
@@ -71,6 +81,7 @@ export interface VerificationResponse {
   decision: "VERIFIED" | "REJECTED" | "DISPUTED";
   decision_source: string;
   blockchain_consistent: boolean;
+  cache_hit?: boolean;
 }
 
 export interface VerificationResultResponse {
@@ -82,6 +93,33 @@ export interface VerificationResultResponse {
   decision: "VERIFIED" | "REJECTED" | "DISPUTED" | "NONE";
   is_finalized: boolean;
   decision_source: string;
+  builders?: BuilderVerificationDetail[];
+  build_config_id?: string;
+  cache_hit?: boolean;
+}
+
+export interface ArtifactDetectionResponse {
+  repository_url: string;
+  commit_sha: string;
+  project_type: string;
+  build_config_id: string;
+  evidence: string[];
+  artifact: {
+    path: string;
+    name: string;
+    extension: string;
+    size_bytes: number;
+  };
+  candidates_found: number;
+}
+
+export interface ArtifactHashResponse {
+  repository_url: string;
+  commit_sha: string;
+  artifact: ArtifactDetectionResponse["artifact"];
+  algorithm: "sha256";
+  digest: string;
+  bytes_hashed: number;
 }
 
 export interface OnChainAttestation {
@@ -119,6 +157,7 @@ export async function createRelease(
       artifact_name: payload.artifact_name || "sampleproject-3.0.0-py3-none-any.whl",
       builder_count: payload.builder_count || 3,
       quorum_required: payload.quorum_required || 2,
+      reuse_existing: payload.reuse_existing || false,
     }),
   });
 
@@ -127,6 +166,43 @@ export async function createRelease(
     throw new Error(errData.detail || `Create release failed (${res.status})`);
   }
 
+  return res.json();
+}
+
+export async function detectArtifact(
+  repositoryUrl: string,
+  commitSha: string
+): Promise<ArtifactDetectionResponse> {
+  const res = await fetch(`${API_BASE}/api/v1/artifacts/detect`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ repository_url: repositoryUrl, commit_sha: commitSha }),
+  });
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(error.detail || `Artifact detection failed (${res.status})`);
+  }
+  return res.json();
+}
+
+export async function generateArtifactHash(
+  repositoryUrl: string,
+  commitSha: string,
+  artifactPath: string
+): Promise<ArtifactHashResponse> {
+  const res = await fetch(`${API_BASE}/api/v1/artifacts/hash`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      repository_url: repositoryUrl,
+      commit_sha: commitSha,
+      artifact_path: artifactPath,
+    }),
+  });
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(error.detail || `SHA-256 generation failed (${res.status})`);
+  }
   return res.json();
 }
 
