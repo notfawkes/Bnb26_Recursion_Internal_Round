@@ -242,3 +242,11 @@ class ReleaseService:
     async def get_attestations(self, release_id: str) -> List[Dict[str, Any]]:
         """Retrieves stored attestations directly from blockchain state."""
         return await self.blockchain_service.get_attestations(release_id)
+
+    async def list_releases(self) -> List[Dict[str, Any]]:
+        """Lists all releases directly from the blockchain state."""
+        if hasattr(self.blockchain_service, "get_all_releases"):
+            raw_releases = await self.blockchain_service.get_all_releases()
+        else:
+            raw_releases = []
+        return raw_releases
