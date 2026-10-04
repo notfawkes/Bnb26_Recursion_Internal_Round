@@ -211,6 +211,14 @@ class MockBlockchainService:
     async def is_builder(self, address: str) -> bool:
         return True
 
+    async def get_all_releases(self) -> List[Dict[str, Any]]:
+        results = []
+        for rel_id in sorted(self._releases.keys(), reverse=True):
+            rel = await self.get_release(rel_id)
+            if rel and rel.get("release_id"):
+                results.append(rel)
+        return results
+
 
 class AnvilBlockchainService:
     """
@@ -546,3 +554,20 @@ class AnvilBlockchainService:
             return self.contract.functions.isBuilder(Web3.to_checksum_address(address)).call()
         except Exception:
             return True
+
+    async def get_all_releases(self) -> List[Dict[str, Any]]:
+        self._check_blockchain_availability()
+        if not self.is_connected():
+            return await self.mock_fallback.get_all_releases()
+        try:
+            count = self.contract.functions.releaseCount().call()
+            results = []
+            for i in range(count, 0, -1):
+                try:
+                    rel = await self.get_release(i)
+                    results.append(rel)
+                except Exception:
+                    continue
+            return results
+        except Exception:
+            return []
