@@ -1,6 +1,7 @@
 from typing import List, Optional, Any
 from pydantic import BaseModel, Field, model_validator
 from app.core.enums import Decision, BuilderStatus
+from app.schemas.attestation import BuilderLogEntry
 
 
 class BuilderVerificationResult(BaseModel):
@@ -14,6 +15,7 @@ class BuilderVerificationResult(BaseModel):
     commit_match: bool
     valid: bool
     status_detail: BuilderStatus = Field(default=BuilderStatus.AGREE, description="AGREE, DISAGREE, or INVALID")
+    logs: List[BuilderLogEntry] = Field(default_factory=list)
 
     @model_validator(mode="before")
     @classmethod

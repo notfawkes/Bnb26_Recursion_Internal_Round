@@ -31,6 +31,13 @@ class BuildRequest(BaseModel):
     builders: List[str] = Field(default_factory=lambda: ["builder-a", "builder-b", "builder-c"])
 
 
+class BuilderLogEntry(BaseModel):
+    timestamp: str
+    stage: str
+    level: str = "INFO"
+    message: str
+
+
 class BuilderResult(BaseModel):
     builder_id: str
     status: str = Field(default="SUCCESS", description="Build result status (SUCCESS or FAILURE)")
@@ -39,6 +46,7 @@ class BuilderResult(BaseModel):
     attestation: Optional[Attestation] = None
     signed_attestation: Optional[Dict[str, Any]] = None
     error_code: Optional[str] = None
+    logs: List[BuilderLogEntry] = Field(default_factory=list)
 
 
 class BuilderManagerResponse(BaseModel):

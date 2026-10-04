@@ -47,6 +47,7 @@ class VerificationService:
             art_hash = builder_result.artifact_sha256.lower().strip()
             signed_env = builder_result.signed_attestation
             att_dict = builder_result.attestation.model_dump() if builder_result.attestation else None
+            logs = builder_result.logs
         else:
             b_res_dict = dict(builder_result)
             b_id = str(b_res_dict.get("builder_id", "")).lower().strip()
@@ -55,6 +56,7 @@ class VerificationService:
             art_hash = str(b_res_dict.get("artifact_sha256", "")).lower().strip()
             signed_env = b_res_dict.get("signed_attestation")
             att_dict = b_res_dict.get("attestation")
+            logs = b_res_dict.get("logs", [])
             if isinstance(att_dict, Attestation):
                 att_dict = att_dict.model_dump()
 
@@ -141,7 +143,8 @@ class VerificationService:
                 source_match=source_match,
                 commit_match=commit_match,
                 valid=valid,
-                status_detail=BuilderStatus.AGREE if valid else BuilderStatus.INVALID
+                status_detail=BuilderStatus.AGREE if valid else BuilderStatus.INVALID,
+                logs=logs,
             )
 
         # ==========================================================
@@ -210,7 +213,8 @@ class VerificationService:
             source_match=source_match,
             commit_match=commit_match,
             valid=valid,
-            status_detail=BuilderStatus.AGREE if valid else BuilderStatus.INVALID
+            status_detail=BuilderStatus.AGREE if valid else BuilderStatus.INVALID,
+            logs=logs,
         )
 
     @classmethod

@@ -2,6 +2,7 @@
 
 import time
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 
 import docker
@@ -20,6 +21,10 @@ class ExecutionResult:
     exit_code: int | None
     log: str
     image_id: str
+    container_id: str = ""
+    container_name: str = ""
+    started_at: str = ""
+    finished_at: str = ""
 
 
 def _limited_logs(container: object) -> str:
@@ -46,6 +51,7 @@ def execute_build(
             raise BuildExecutionError("Docker engine is unavailable") from exc
 
     container = None
+    started_at = datetime.now(timezone.utc).isoformat()
     try:
         try:
             image = client.images.get(config.image)
@@ -96,6 +102,10 @@ def execute_build(
                 exit_code=None,
                 log=_limited_logs(container),
                 image_id=image.id,
+                container_id=str(getattr(container, "id", "") or ""),
+                container_name=str(getattr(container, "name", "") or ""),
+                started_at=started_at,
+                finished_at=datetime.now(timezone.utc).isoformat(),
             )
 
         exit_code = container.attrs["State"]["ExitCode"]
@@ -104,6 +114,10 @@ def execute_build(
             exit_code=exit_code,
             log=_limited_logs(container),
             image_id=image.id,
+            container_id=str(getattr(container, "id", "") or ""),
+            container_name=str(getattr(container, "name", "") or ""),
+            started_at=started_at,
+            finished_at=datetime.now(timezone.utc).isoformat(),
         )
     except DockerException as exc:
         raise BuildExecutionError("Docker build operation failed") from exc

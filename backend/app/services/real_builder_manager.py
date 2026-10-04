@@ -54,7 +54,8 @@ class RealBuilderManager:
                     artifact_name=art_name,
                     artifact_sha256=res.artifact_hash or "",
                     signed_attestation=res.signed_attestation,
-                    error_code=res.error_code
+                    error_code=res.error_code,
+                    logs=list(res.logs),
                 )
             )
 

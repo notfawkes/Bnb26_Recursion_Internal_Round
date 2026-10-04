@@ -61,6 +61,20 @@ def test_single_builder_produces_verifiable_signed_evidence(tmp_path: Path) -> N
         },
     }
     assert outcome.signed_attestation is not None
+    assert [entry["stage"] for entry in outcome.logs] == [
+        "REQUEST",
+        "SOURCE",
+        "SOURCE",
+        "CONTAINER",
+        "CONTAINER",
+        "BUILD",
+        "CLEANUP",
+        "ARTIFACT",
+        "HASH",
+        "ATTESTATION",
+    ]
+    assert "network=none" in outcome.logs[3]["message"]
+    assert "force-removed" in outcome.logs[6]["message"]
     assert verify_attestation_signature(
         outcome.signed_attestation, keys.public_path.read_bytes()
     )
