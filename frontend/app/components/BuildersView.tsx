@@ -185,6 +185,31 @@ export default function BuildersView() {
         </div>
       )}
 
+      {/* Architectural FAQ: Why identical container configuration */}
+      <div className="rounded-2xl bg-zinc-950 border border-white/10 p-8 sm:p-10 space-y-4">
+        <h3 className="text-base font-bold text-white flex items-center gap-2.5">
+          <Container className="w-5 h-5 text-white" />
+          Why Are the Container Configurations Identical?
+        </h3>
+        <p className="text-xs text-zinc-400 leading-relaxed max-w-4xl">
+          In reproducible build verification, <strong className="text-white">standardized build environments are mandatory</strong>. If builders ran differing OS distributions, compiler versions, or package toolchains, compiled wheels and binaries would vary in bytecode and timestamps, creating false discrepancies.
+        </p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs pt-2">
+          <div className="p-4 rounded-xl bg-black border border-white/5 space-y-1.5">
+            <span className="text-white font-semibold block">Identical Build Specification</span>
+            <p className="text-zinc-400 leading-relaxed">
+              All builders use the declared build config (<code className="text-zinc-200">python-package-v1</code>) with fixed timestamps (<code className="text-zinc-200">SOURCE_DATE_EPOCH</code>) and identical Python toolchains so that byte-for-byte binary reproducibility can be objectively proven.
+            </p>
+          </div>
+          <div className="p-4 rounded-xl bg-black border border-white/5 space-y-1.5">
+            <span className="text-white font-semibold block">Independent Trust Boundaries</span>
+            <p className="text-zinc-400 leading-relaxed">
+              While the image is standardized, the <strong className="text-zinc-200">execution is completely separate</strong>: separate container instances, separate disk mounts, distinct Ed25519 private keys, and distinct Ethereum wallets submitting evidence to the blockchain.
+            </p>
+          </div>
+        </div>
+      </div>
+
       {/* Security Principles Banner */}
       <div className="rounded-2xl bg-zinc-950 border border-white/10 p-8 sm:p-10 space-y-6">
         <h3 className="text-lg font-bold text-white flex items-center gap-2.5">
