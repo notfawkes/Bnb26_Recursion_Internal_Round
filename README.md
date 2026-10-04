@@ -148,38 +148,8 @@ Detect committed artifact ──► Stream SHA-256 ──► Create on-chain rel
 
 ## Architecture
 
-```mermaid
-flowchart LR
-    U[Developer / Auditor] --> UI[Next.js Dashboard]
-    UI -->|REST| API[FastAPI Verification API]
+![Quorum Architecture](docs/assets/quorum-architecture.png)
 
-    API --> INSPECT[Artifact Inspector]
-    INSPECT -->|Pinned commit| GH[(GitHub)]
-    INSPECT -->|Artifact path + SHA-256| API
-
-    API --> RELEASE[Release Service]
-    RELEASE --> ORCH[Builder Orchestrator]
-
-    subgraph BUILDERS[Hermetic Builder Boundary]
-      direction TB
-      ORCH --> A[Builder A Container]
-      ORCH --> B[Builder B Container]
-      ORCH --> C[Builder C Container]
-      A --> HA[Artifact hash + attestation]
-      B --> HB[Artifact hash + attestation]
-      C --> HC[Artifact hash + attestation]
-    end
-
-    HA --> VERIFY[Attestation + Quorum Engine]
-    HB --> VERIFY
-    HC --> VERIFY
-
-    VERIFY -->|Builder hashes| CONTRACT[QuorumVerifier.sol]
-    RELEASE -->|Release metadata| CONTRACT
-    CONTRACT --> CHAIN[(Ethereum / Anvil Ledger)]
-    CHAIN -->|Authoritative verdict| API
-    API -->|Live status, logs, proof| UI
-```
 
 ### Component responsibilities
 
