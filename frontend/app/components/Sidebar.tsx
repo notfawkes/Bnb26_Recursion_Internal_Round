@@ -65,9 +65,9 @@ export default function Sidebar({
         <div className="flex items-center justify-between px-2 pt-1 pb-4 border-b border-white/10">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-lg bg-white text-black flex items-center justify-center font-bold text-base shadow-[0_0_15px_rgba(255,255,255,0.2)]">
-              Q
+              <img src="/quorum-logo.png" alt="Quorum Logo" />
             </div>
-            <div>
+            <div> 
               <span className="font-extrabold tracking-tight text-sm text-white block">
                 QUORUM
               </span>
