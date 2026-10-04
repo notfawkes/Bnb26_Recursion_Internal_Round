@@ -16,6 +16,7 @@ def test_python_node_and_java_profiles_are_approved() -> None:
     assert set(APPROVED_BUILD_CONFIGS) == {
         "python-package-v1",
         "node-package-v1",
+        "node-disputed-demo-v1",
         "java-maven-v1",
     }
 
@@ -29,6 +30,10 @@ def test_python_node_and_java_profiles_are_approved() -> None:
 def test_node_and_java_commands_are_fixed_and_offline() -> None:
     assert APPROVED_BUILD_CONFIGS["node-package-v1"].image == "quorum-node-package-v1:local"
     assert "npm pack" in APPROVED_BUILD_CONFIGS["node-package-v1"].command[-1]
+    disputed_command = APPROVED_BUILD_CONFIGS["node-disputed-demo-v1"].command[-1]
+    assert APPROVED_BUILD_CONFIGS["node-disputed-demo-v1"].image == "quorum-node-package-v1:local"
+    assert "quorum-build-nonce.txt" in disputed_command
+    assert "--ignore-scripts" in disputed_command
     assert APPROVED_BUILD_CONFIGS["java-maven-v1"].image == "quorum-java-maven-v1:local"
     assert "mvn" in APPROVED_BUILD_CONFIGS["java-maven-v1"].command[-1]
     assert " -o " in APPROVED_BUILD_CONFIGS["java-maven-v1"].command[-1]

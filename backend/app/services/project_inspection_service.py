@@ -32,14 +32,21 @@ class ProjectInspectionService:
     PROFILE_MARKERS = {
         "python-package-v1": ("Python", ("pyproject.toml", "setup.py", "setup.cfg")),
         "node-package-v1": ("Node.js", ("package.json",)),
+        "node-disputed-demo-v1": (
+            "Node.js (Disputed Demo)",
+            ("package.json", "quorum-disputed-demo.json"),
+        ),
         "java-maven-v1": ("Java", ("pom.xml",)),
     }
 
     PROFILE_EXTENSIONS = {
         "python-package-v1": ".whl",
         "node-package-v1": ".tgz",
+        "node-disputed-demo-v1": ".tgz",
         "java-maven-v1": ".jar",
     }
+
+    ALL_MARKERS_REQUIRED = frozenset({"node-disputed-demo-v1"})
 
     @classmethod
     def _validate_source(cls, repository_url: str, commit_sha: str) -> tuple[str, str]:
@@ -109,6 +116,8 @@ class ProjectInspectionService:
         matches: list[tuple[int, str, str, list[str]]] = []
         for profile, (project_type, markers) in cls.PROFILE_MARKERS.items():
             evidence = [marker for marker in markers if (source / marker).is_file()]
+            if profile in cls.ALL_MARKERS_REQUIRED and len(evidence) != len(markers):
+                continue
             if evidence:
                 matches.append((len(evidence), profile, project_type, evidence))
         if not matches:

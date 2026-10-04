@@ -50,6 +50,22 @@ def test_artifact_selection_prefers_profile_extension_and_output_directory(tmp_p
     assert result.candidates_found == 2
 
 
+def test_explicit_disputed_marker_selects_demo_profile(tmp_path: Path) -> None:
+    (tmp_path / "package.json").write_text("{}", encoding="utf-8")
+    (tmp_path / "quorum-disputed-demo.json").write_text("{}", encoding="utf-8")
+    package = tmp_path / "release-assets" / "published" / "demo-1.0.0.tgz"
+    package.parent.mkdir(parents=True)
+    package.write_bytes(b"node package")
+
+    result = ProjectInspectionService.inspect_directory(
+        tmp_path, "https://github.com/example/demo", "e" * 40
+    )
+
+    assert result.project_type == "Node.js (Disputed Demo)"
+    assert result.build_config_id == "node-disputed-demo-v1"
+    assert result.evidence == ["package.json", "quorum-disputed-demo.json"]
+
+
 def test_rejects_repository_without_supported_marker(tmp_path: Path) -> None:
     (tmp_path / "dist").mkdir()
     (tmp_path / "dist" / "demo.jar").write_bytes(b"jar")

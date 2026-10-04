@@ -50,6 +50,20 @@ APPROVED_BUILD_CONFIGS: Mapping[str, BuildConfiguration] = MappingProxyType(
                 memory_mb=512,
             ),
         ),
+        "node-disputed-demo-v1": BuildConfiguration(
+            image="quorum-node-package-v1:local",
+            command=(
+                "sh",
+                "-c",
+                "mkdir -p /tmp/work /out && cp -a /src/. /tmp/work/ && printf '%s\\n' \"$(cat /proc/sys/kernel/random/uuid)\" > /tmp/work/quorum-build-nonce.txt && cd /tmp/work && npm pack --ignore-scripts --pack-destination /out",
+            ),
+            artifact_glob="dist/*.tgz",
+            limits=ResourceLimits(
+                timeout_seconds=300,
+                cpu_count=1,
+                memory_mb=512,
+            ),
+        ),
         "java-maven-v1": BuildConfiguration(
             image="quorum-java-maven-v1:local",
             command=(
