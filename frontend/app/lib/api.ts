@@ -179,6 +179,46 @@ export async function getReleaseAttestations(
   return res.json();
 }
 
+export interface BuilderModel {
+  builder_id: string;
+  name: string;
+  role: string;
+  wallet_address: string;
+  public_key_id: string;
+  public_key: string;
+  execution_environment: string;
+  container_image: string;
+  signature_algorithm: string;
+  status: "ONLINE" | "UNREGISTERED";
+  is_registered_on_chain: boolean;
+}
+
+export async function listReleases(): Promise<CreateReleaseResponse[]> {
+  const res = await fetch(`${API_BASE}/api/v1/releases`, {
+    method: "GET",
+  });
+
+  if (!res.ok) {
+    const errData = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(errData.detail || `List releases failed (${res.status})`);
+  }
+
+  return res.json();
+}
+
+export async function fetchBuilders(): Promise<BuilderModel[]> {
+  const res = await fetch(`${API_BASE}/api/v1/builders`, {
+    method: "GET",
+  });
+
+  if (!res.ok) {
+    const errData = await res.json().catch(() => ({ detail: res.statusText }));
+    throw new Error(errData.detail || `Fetch builders failed (${res.status})`);
+  }
+
+  return res.json();
+}
+
 export async function getRelease(
   releaseId: string
 ): Promise<CreateReleaseResponse> {
