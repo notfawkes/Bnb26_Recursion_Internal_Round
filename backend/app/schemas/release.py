@@ -22,6 +22,10 @@ class ReleaseCreate(BaseModel):
     artifact_name: str = Field(default="project-linux-amd64.tar.gz", description="Artifact binary filename")
     builder_count: int = Field(default=3, ge=1, description="Total independent builders")
     quorum_required: int = Field(default=2, ge=1, description="Quorum threshold required for agreement")
+    reuse_existing: bool = Field(
+        default=False,
+        description="Reuse an exact existing release instead of creating a duplicate",
+    )
 
     @model_validator(mode="after")
     def validate_repo_and_commit(self):
@@ -57,3 +61,4 @@ class ReleaseResponse(BaseModel):
     quorum_required: int
     status: ReleaseStatus
     created_at: str
+    reused: bool = False

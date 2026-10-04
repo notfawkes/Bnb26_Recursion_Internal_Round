@@ -12,6 +12,7 @@ mock_builder_manager = MockBuilderManager()
 real_builder_manager = RealBuilderManager()
 mock_blockchain_service = MockBlockchainService()
 anvil_blockchain_service = AnvilBlockchainService()
+_release_services: dict[tuple[int, int], ReleaseService] = {}
 
 
 def get_builder_manager() -> BuilderManager:
@@ -39,7 +40,10 @@ def get_release_service(
     blockchain_svc: BlockchainService = Depends(get_blockchain_service)
 ) -> ReleaseService:
     """Dependency injection for ReleaseService."""
-    return ReleaseService(
-        builder_manager=builder_mgr,
-        blockchain_service=blockchain_svc
-    )
+    key = (id(builder_mgr), id(blockchain_svc))
+    if key not in _release_services:
+        _release_services[key] = ReleaseService(
+            builder_manager=builder_mgr,
+            blockchain_service=blockchain_svc,
+        )
+    return _release_services[key]

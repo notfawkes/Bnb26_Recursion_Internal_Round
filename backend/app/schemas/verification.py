@@ -69,3 +69,7 @@ class VerificationResponse(BaseModel):
     decision: Decision
     decision_source: str = Field(default="BLOCKCHAIN", description="Source of final decision: BLOCKCHAIN or LOCAL")
     blockchain_consistent: bool = Field(default=True, description="True if local expected decision matches blockchain decision")
+    cache_hit: bool = Field(
+        default=False,
+        description="True when a finalized audit result was returned without rerunning builders",
+    )

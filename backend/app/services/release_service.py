@@ -1,5 +1,5 @@
 import datetime
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, List, Optional, ClassVar
 from app.schemas.release import ReleaseCreate, ReleaseResponse
 from app.schemas.verification import (
     VerificationResponse, LocalQuorumResult, BlockchainRecord, BuilderVerificationResult
@@ -20,6 +20,8 @@ class ReleaseService:
     Release Management and Verification Orchestration Service.
     Completely database-free: The blockchain is the single persistent source of truth.
     """
+
+    _verification_cache: ClassVar[dict[tuple[int, str], VerificationResponse]] = {}
 
     def __init__(
         self,
@@ -55,6 +57,43 @@ class ReleaseService:
             raise InvalidQuorumPolicyError("builder_count and quorum_required must be at least 1.")
 
         created_at = datetime.datetime.now(datetime.timezone.utc).isoformat()
+
+        # An explicit UI/API opt-in prevents duplicate on-chain releases while
+        # preserving the ability to create a separate verification intentionally.
+        if payload.reuse_existing and hasattr(self.blockchain_service, "get_all_releases"):
+            existing_releases = await self.blockchain_service.get_all_releases()
+            normalized_repository = repo_url.rstrip("/").removesuffix(".git").lower()
+            for existing in existing_releases:
+                existing_repository = str(existing.get("repository_url", "")).rstrip("/").removesuffix(".git").lower()
+                if (
+                    existing_repository == normalized_repository
+                    and str(existing.get("commit_sha", "")).lower() == pinned_commit
+                    and str(existing.get("published_hash", "")).lower() == published_hash
+                    and existing.get("build_config_id", "python-package-v1") == payload.build_config_id
+                    and existing.get("artifact_name", "") == payload.artifact_name
+                    and int(existing.get("builder_count", 0)) == payload.builder_count
+                    and int(existing.get("quorum_required", 0)) == payload.quorum_required
+                ):
+                    decision = str(existing.get("decision", "CREATED"))
+                    try:
+                        existing_status = ReleaseStatus(decision)
+                    except ValueError:
+                        existing_status = ReleaseStatus.CREATED
+                    return ReleaseResponse(
+                        release_id=str(existing["release_id"]),
+                        repository_url=repo_url,
+                        repository=repo_url,
+                        commit_sha=pinned_commit,
+                        commit=pinned_commit,
+                        build_config_id=payload.build_config_id,
+                        published_hash=published_hash,
+                        artifact_name=payload.artifact_name,
+                        builder_count=payload.builder_count,
+                        quorum_required=payload.quorum_required,
+                        status=existing_status,
+                        created_at=created_at,
+                        reused=True,
+                    )
 
         # 5. Call Blockchain Service to create release on-chain
         bc_create_res = await self.blockchain_service.create_release(
@@ -126,6 +165,17 @@ class ReleaseService:
         10. Return structured API response with decision_source=BLOCKCHAIN
         """
         release = await self.get_release(release_id)
+
+        cache_key = (id(self.blockchain_service), str(release_id))
+        cached = self._verification_cache.get(cache_key)
+        if cached is not None:
+            return cached.model_copy(update={"cache_hit": True})
+
+        existing_state = await self.blockchain_service.get_release(release_id)
+        if existing_state.get("is_finalized"):
+            reconstructed = await self._reconstruct_finalized_response(release, existing_state)
+            self._verification_cache[cache_key] = reconstructed
+            return reconstructed.model_copy(update={"cache_hit": True})
 
         # 1. Construct BuildRequest for Person 2 (NO published_hash!)
         builder_names = [f"builder-{'abcdefghijklmnopqrstuvwxyz'[i]}" for i in range(release.builder_count)]
@@ -209,7 +259,7 @@ class ReleaseService:
         )
 
         # 9. Return Response
-        return VerificationResponse(
+        response = VerificationResponse(
             release_id=str(release_id),
             repository_url=release.repository_url,
             commit_sha=release.commit_sha,
@@ -222,12 +272,83 @@ class ReleaseService:
             decision_source="BLOCKCHAIN" if bc_is_finalized else "LOCAL",
             blockchain_consistent=blockchain_consistent
         )
+        self._verification_cache[cache_key] = response
+        return response
+
+    async def _reconstruct_finalized_response(
+        self, release: ReleaseResponse, bc_state: Dict[str, Any]
+    ) -> VerificationResponse:
+        """Rebuild an API audit view from immutable on-chain evidence without Docker."""
+        attestations = await self.blockchain_service.get_attestations(release.release_id)
+        quorum_hash = bc_state.get("quorum_hash") or None
+        builders: List[BuilderVerificationResult] = []
+        matching = 0
+        for index, attestation in enumerate(attestations):
+            artifact_hash = str(attestation.get("artifactHash", ""))
+            agrees = bool(quorum_hash and artifact_hash.lower() == str(quorum_hash).lower())
+            if agrees:
+                matching += 1
+            builders.append(
+                BuilderVerificationResult(
+                    builder_id=f"builder-{'abcdefghijklmnopqrstuvwxyz'[index]}",
+                    status="SUCCESS",
+                    artifact_name=release.artifact_name,
+                    artifact_sha256=artifact_hash,
+                    signature_valid=True,
+                    identity_valid=True,
+                    source_match=True,
+                    commit_match=True,
+                    valid=True,
+                    status_detail=("AGREE" if agrees else "DISAGREE"),
+                    logs=[],
+                )
+            )
+
+        decision_text = str(bc_state.get("decision", "DISPUTED"))
+        try:
+            decision = Decision(decision_text)
+        except ValueError:
+            decision = Decision.DISPUTED
+        local_quorum = LocalQuorumResult(
+            achieved=bool(quorum_hash),
+            agreement=f"{matching}/{release.builder_count}",
+            quorum_hash=quorum_hash,
+            expected_decision=decision,
+        )
+        blockchain = BlockchainRecord(
+            release_id=release.release_id,
+            published_hash=bc_state.get("published_hash", release.published_hash),
+            quorum_hash=quorum_hash,
+            decision=decision.value,
+            is_finalized=True,
+            create_release_tx=bc_state.get("create_release_tx"),
+            attestation_txs=bc_state.get("attestation_txs", []),
+            finalize_tx=bc_state.get("finalize_tx"),
+        )
+        return VerificationResponse(
+            release_id=release.release_id,
+            repository_url=release.repository_url,
+            commit_sha=release.commit_sha,
+            build_config_id=release.build_config_id,
+            published_hash=release.published_hash,
+            builders=builders,
+            local_quorum=local_quorum,
+            blockchain=blockchain,
+            decision=decision,
+            decision_source="BLOCKCHAIN",
+            blockchain_consistent=True,
+            cache_hit=True,
+        )
 
     async def get_verification_result(self, release_id: str) -> Optional[Dict[str, Any]]:
         """Retrieves verification audit record directly from blockchain state."""
         bc_state = await self.blockchain_service.get_release(release_id)
         if not bc_state or not bc_state.get("is_finalized"):
             return None
+        cache_key = (id(self.blockchain_service), str(release_id))
+        cached = self._verification_cache.get(cache_key)
+        if cached is not None:
+            return cached.model_copy(update={"cache_hit": True}).model_dump(mode="json")
         return {
             "release_id": str(release_id),
             "repository_url": bc_state.get("repository_url", ""),
@@ -250,3 +371,4 @@ class ReleaseService:
         else:
             raw_releases = []
         return raw_releases
+
