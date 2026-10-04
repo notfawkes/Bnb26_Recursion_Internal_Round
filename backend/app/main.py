@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-from app.api.routes import health, releases, builders
+from app.api.routes import artifacts, health, releases, builders
 from app.core.exceptions import QuorumException
 
 app = FastAPI(
@@ -31,6 +31,7 @@ async def quorum_exception_handler(request: Request, exc: QuorumException):
 app.include_router(health.router)
 app.include_router(releases.router)
 app.include_router(builders.router)
+app.include_router(artifacts.router)
 
 
 @app.get("/")
