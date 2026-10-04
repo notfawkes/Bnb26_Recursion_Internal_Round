@@ -1,5 +1,20 @@
 # Builder demo (Steps 2–9)
 
+Quorum now has three predefined, network-isolated profiles. Repository content
+can select a profile, but it cannot supply arbitrary shell commands:
+
+```powershell
+docker build -f builders/runner/Dockerfile -t quorum-python-package-v1:local builders/runner
+docker build -f builders/runner/node.Dockerfile -t quorum-node-package-v1:local builders/runner
+docker build -f builders/runner/java.Dockerfile -t quorum-java-maven-v1:local builders/runner
+```
+
+- `python-package-v1` creates one wheel.
+- `node-package-v1` creates one npm package tarball with `npm pack`.
+- `java-maven-v1` runs Maven offline. Dependencies must already be baked into
+  the runner image; missing dependencies fail closed instead of enabling
+  container network access.
+
 Run these commands from the repository root with Docker Desktop running:
 
 ```powershell
