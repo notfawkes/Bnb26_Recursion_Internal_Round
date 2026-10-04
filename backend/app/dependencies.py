@@ -1,0 +1,49 @@
+from fastapi import Depends
+from app.config import settings
+from app.services.mock_builder_manager import MockBuilderManager
+from app.services.real_builder_manager import RealBuilderManager
+from app.services.blockchain_service import MockBlockchainService, AnvilBlockchainService
+from app.interfaces.builder_manager import BuilderManager
+from app.interfaces.blockchain import BlockchainService
+from app.services.release_service import ReleaseService
+
+# Global service singletons
+mock_builder_manager = MockBuilderManager()
+real_builder_manager = RealBuilderManager()
+mock_blockchain_service = MockBlockchainService()
+anvil_blockchain_service = AnvilBlockchainService()
+_release_services: dict[tuple[int, int], ReleaseService] = {}
+
+
+def get_builder_manager() -> BuilderManager:
+    """
+    Dependency for BuilderManager.
+    Switches between Mock and Real based on settings.USE_MOCK_BUILDERS.
+    """
+    if settings.USE_MOCK_BUILDERS:
+        return mock_builder_manager
+    return real_builder_manager
+
+
+def get_blockchain_service() -> BlockchainService:
+    """
+    Dependency for BlockchainService.
+    Switches between Mock and Anvil based on settings.USE_MOCK_BLOCKCHAIN.
+    """
+    if settings.USE_MOCK_BLOCKCHAIN:
+        return mock_blockchain_service
+    return anvil_blockchain_service
+
+
+def get_release_service(
+    builder_mgr: BuilderManager = Depends(get_builder_manager),
+    blockchain_svc: BlockchainService = Depends(get_blockchain_service)
+) -> ReleaseService:
+    """Dependency injection for ReleaseService."""
+    key = (id(builder_mgr), id(blockchain_svc))
+    if key not in _release_services:
+        _release_services[key] = ReleaseService(
+            builder_manager=builder_mgr,
+            blockchain_service=blockchain_svc,
+        )
+    return _release_services[key]
