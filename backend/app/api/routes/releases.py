@@ -28,6 +28,46 @@ async def create_release(
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 
+@router.get("", response_model=List[ReleaseResponse])
+async def list_releases(
+    service: ReleaseService = Depends(get_release_service)
+):
+    """Retrieve all releases directly from the blockchain state."""
+    try:
+        raw_releases = await service.list_releases()
+        results = []
+        for r in raw_releases:
+            dec = r.get("decision", "NONE")
+            rel_status = (
+                "VERIFIED"
+                if dec == "VERIFIED"
+                else (
+                    "REJECTED"
+                    if dec == "REJECTED"
+                    else ("DISPUTED" if dec == "DISPUTED" else "CREATED")
+                )
+            )
+            results.append(
+                ReleaseResponse(
+                    release_id=str(r.get("release_id", "")),
+                    repository_url=r.get("repository_url", ""),
+                    repository=r.get("repository_url", ""),
+                    commit_sha=r.get("commit_sha", ""),
+                    commit=r.get("commit_sha", ""),
+                    build_config_id=r.get("build_config_id", "python-package-v1"),
+                    published_hash=r.get("published_hash", ""),
+                    artifact_name=r.get("artifact_name", "sampleproject-3.0.0-py3-none-any.whl"),
+                    builder_count=r.get("builder_count", 3),
+                    quorum_required=r.get("quorum_required", 2),
+                    status=rel_status,
+                    created_at=r.get("created_at") or "2026-10-04T00:00:00Z",
+                )
+            )
+        return results
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+
 @router.get("/{release_id}", response_model=ReleaseResponse)
 async def get_release(
     release_id: str,
