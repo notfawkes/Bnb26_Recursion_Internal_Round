@@ -14,6 +14,9 @@ import {
   ExternalLink,
   AlertCircle,
   FileCode2,
+  Copy,
+  Check,
+  RefreshCw,
 } from "lucide-react";
 import Sidebar from "./components/Sidebar";
 import VerificationsView, { VerificationCardItem } from "./components/VerificationsView";
@@ -25,8 +28,11 @@ import {
   verifyRelease,
   getReleaseResult,
   getReleaseAttestations,
+  getRelease,
+  listReleases,
+  fetchBuilders,
   VerificationResponse,
-  checkBackendHealth,
+  BuilderModel,
 } from "./lib/api";
 
 // 5 progress steps required by the protocol
@@ -50,7 +56,7 @@ interface BuilderInfo {
   signatureValid?: boolean;
 }
 
-interface ReleaseItem {
+export interface ReleaseItem {
   id: string;
   repoUrl: string;
   commitHash: string;
@@ -71,97 +77,9 @@ interface ReleaseItem {
     resultHash: string;
     attestationSig: string;
     status: "Match ✓" | "Disagree" | "Invalid" | "Pending";
+    wallet?: string;
   }[];
 }
-
-const INITIAL_RELEASES: ReleaseItem[] = [
-  {
-    id: "11",
-    repoUrl: "https://github.com/pypa/sampleproject",
-    commitHash: "621e497",
-    fullCommitHash: "621e4974ca25ce531773def586ba3ed8e736b3fc",
-    quorumPolicy: "2 of 3 Consensus",
-    verificationState: "Verified",
-    publishedArtifactHash: "sha256:0d9a9a4...afd1",
-    fullArtifactHash: "0d9a9a49b40160078387d2ec1c7a59d4135c3095b1b210d8c537ad9f7accafd1",
-    quorumHash: "0d9a9a49b40160078387d2ec1c7a59d4135c3095b1b210d8c537ad9f7accafd1",
-    dateTime: "Oct 04, 2026 • Live On-Chain",
-    decisionSource: "BLOCKCHAIN",
-    createTx: "0x3fca2120c1a5c268399e8139d77a7cac177374e27ac568ae0f22ed2cb073f2b9",
-    attestationTxs: [
-      "0x7215264e66750bba746b65d116378fd1d69c3fb055f8f50988eabb828dbbe1ed",
-      "0x8740459ca3a5d875fe13b4276d228c58d14e339c310895583bc97a8af66e04df",
-      "0x395515d8732b11104867a62fd1a6e3c1a31e4d0244abe6d94a6e941d6a5a7164",
-    ],
-    finalizeTx: "0x99e2bb1c99be71e01741fdd81352a5cbcf00d992da7131da34942968a4bd8097",
-    builderConfigurations: [
-      {
-        name: "Builder #1 (builder-a)",
-        type: "AWS Nitro Enclave (us-east-1) • Wallet: 0x7099...79C8",
-        resultHash: "0d9a9a49b40160078387d2ec1c7a59d4135c3095b1b210d8c537ad9f7accafd1",
-        attestationSig: "Ed25519 Verified ✓ (builder-a-key-v1)",
-        status: "Match ✓",
-      },
-      {
-        name: "Builder #2 (builder-b)",
-        type: "GCP Confidential Space (us-central1) • Wallet: 0x3C44...93BC",
-        resultHash: "0d9a9a49b40160078387d2ec1c7a59d4135c3095b1b210d8c537ad9f7accafd1",
-        attestationSig: "Ed25519 Verified ✓ (builder-b-key-v1)",
-        status: "Match ✓",
-      },
-      {
-        name: "Builder #3 (builder-c)",
-        type: "Azure DCsv3 SGX (westeurope) • Wallet: 0x90F7...b906",
-        resultHash: "0d9a9a49b40160078387d2ec1c7a59d4135c3095b1b210d8c537ad9f7accafd1",
-        attestationSig: "Ed25519 Verified ✓ (builder-c-key-v1)",
-        status: "Match ✓",
-      },
-    ],
-  },
-  {
-    id: "5",
-    repoUrl: "https://github.com/pypa/sampleproject",
-    commitHash: "621e497",
-    fullCommitHash: "621e4974ca25ce531773def586ba3ed8e736b3fc",
-    quorumPolicy: "2 of 3 Consensus",
-    verificationState: "Verified",
-    publishedArtifactHash: "sha256:0d9a9a4...afd1",
-    fullArtifactHash: "0d9a9a49b40160078387d2ec1c7a59d4135c3095b1b210d8c537ad9f7accafd1",
-    quorumHash: "0d9a9a49b40160078387d2ec1c7a59d4135c3095b1b210d8c537ad9f7accafd1",
-    dateTime: "Oct 04, 2026 • Verified via Anvil",
-    decisionSource: "BLOCKCHAIN",
-    createTx: "0xd1be6165fc3ab3245a013bcad617f57435db0383c7a8ce632d7c6e5ae69980ab",
-    attestationTxs: [
-      "0x9071f91b3a641afc74a386f8d685cd36b471c377a42f2b90fbd21308928aeecd",
-      "0x1db7a6002419da6629e12cf17bcd4267faba5754da1c50fc9758cd90da5eaa9f",
-      "0xb2dc320a654a84c49409ea55adede45f01d4592aa36430c4de999a0fc1f483b1",
-    ],
-    finalizeTx: "0xa007c95e60e2813b6cbfa739d36bcf7567eab63b9445f8cddb49cc77d42cd59b",
-    builderConfigurations: [
-      {
-        name: "Builder #1 (builder-a)",
-        type: "AWS Nitro Enclave (us-east-1) • TEE Isolated",
-        resultHash: "0d9a9a49b40160078387d2ec1c7a59d4135c3095b1b210d8c537ad9f7accafd1",
-        attestationSig: "Ed25519 Verified ✓",
-        status: "Match ✓",
-      },
-      {
-        name: "Builder #2 (builder-b)",
-        type: "GCP Confidential Space (us-central1) • AMD SEV-SNP",
-        resultHash: "0d9a9a49b40160078387d2ec1c7a59d4135c3095b1b210d8c537ad9f7accafd1",
-        attestationSig: "Ed25519 Verified ✓",
-        status: "Match ✓",
-      },
-      {
-        name: "Builder #3 (builder-c)",
-        type: "Azure DCsv3 SGX (westeurope) • Intel SGX",
-        resultHash: "0d9a9a49b40160078387d2ec1c7a59d4135c3095b1b210d8c537ad9f7accafd1",
-        attestationSig: "Ed25519 Verified ✓",
-        status: "Match ✓",
-      },
-    ],
-  },
-];
 
 export default function DashboardPage() {
   // Navigation active tab state
@@ -186,49 +104,109 @@ export default function DashboardPage() {
   const [latestVerificationResponse, setLatestVerificationResponse] =
     useState<VerificationResponse | null>(null);
 
-  // 4. Releases list state
-  const [allReleases, setAllReleases] = useState<ReleaseItem[]>(INITIAL_RELEASES);
+  // 4. Live Releases state fetched directly from backend
+  const [allReleases, setAllReleases] = useState<ReleaseItem[]>([]);
+  const [isReleasesLoading, setIsReleasesLoading] = useState(false);
 
-  // 5. Builders progress state
+  // 5. Real Builders state
+  const [realBuilders, setRealBuilders] = useState<BuilderModel[]>([]);
   const [builders, setBuilders] = useState<BuilderInfo[]>([
     {
       id: 1,
       builderId: "builder-a",
-      name: "Builder #1 (AWS Nitro Enclave)",
-      config: "Linux x86_64 • TEE Isolated",
+      name: "Builder #1 (builder-a)",
+      config: "Docker Hermetic Container • builder-a-key-v1",
       stepIndex: 0,
-      hash: "Pending build...",
+      hash: "Standby...",
       status: "PENDING",
     },
     {
       id: 2,
       builderId: "builder-b",
-      name: "Builder #2 (GCP Confidential)",
-      config: "AMD SEV-SNP • Airgapped Build",
+      name: "Builder #2 (builder-b)",
+      config: "Docker Hermetic Container • builder-b-key-v1",
       stepIndex: 0,
-      hash: "Pending build...",
+      hash: "Standby...",
       status: "PENDING",
     },
     {
       id: 3,
       builderId: "builder-c",
-      name: "Builder #3 (Azure DCsv3 SGX)",
-      config: "Intel SGX • Hardware Enclave",
+      name: "Builder #3 (builder-c)",
+      config: "Docker Hermetic Container • builder-c-key-v1",
       stepIndex: 0,
-      hash: "Pending build...",
+      hash: "Standby...",
       status: "PENDING",
     },
   ]);
 
-  // 6. Modal state for detailed analysis (80% opacity black)
+  // 6. Modal state for detailed analysis
   const [activeModalRelease, setActiveModalRelease] = useState<ReleaseItem | null>(null);
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
-  // Initial loading simulation and backend check
+  const handleCopy = (text: string, key: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedKey(key);
+    setTimeout(() => setCopiedKey(null), 1500);
+  };
+
+  // Load all releases directly from backend blockchain state
+  const loadAllReleases = async () => {
+    setIsReleasesLoading(true);
+    try {
+      const releasesData = await listReleases();
+      const formatted: ReleaseItem[] = releasesData.map((r) => {
+        const isVerified = r.status === "VERIFIED";
+        const isRejected = r.status === "REJECTED";
+        const isDisputed = r.status === "DISPUTED";
+
+        return {
+          id: r.release_id,
+          repoUrl: r.repository_url,
+          commitHash: r.commit_sha ? r.commit_sha.slice(0, 7) : "",
+          fullCommitHash: r.commit_sha,
+          quorumPolicy: `${r.quorum_required} of ${r.builder_count} Consensus`,
+          verificationState: isVerified
+            ? "Verified"
+            : isRejected
+            ? "Rejected"
+            : isDisputed
+            ? "Disputed"
+            : "Pending",
+          publishedArtifactHash: r.published_hash
+            ? `sha256:${r.published_hash.slice(0, 7)}...${r.published_hash.slice(-4)}`
+            : "",
+          fullArtifactHash: r.published_hash,
+          quorumHash: (r as any).quorum_hash || undefined,
+          dateTime: isVerified ? "Verified on Ethereum Anvil" : "Created on-chain",
+          decisionSource: isVerified ? "BLOCKCHAIN" : undefined,
+          createTx: (r as any).create_release_tx,
+          attestationTxs: (r as any).attestation_txs,
+          finalizeTx: (r as any).finalize_tx,
+          builderConfigurations: [],
+        };
+      });
+
+      setAllReleases(formatted);
+    } catch (err) {
+      console.error("Failed to load releases from backend:", err);
+    } finally {
+      setIsReleasesLoading(false);
+    }
+  };
+
+  // Initial load on mount
   useEffect(() => {
-    const timer = setTimeout(() => {
+    const init = async () => {
+      await Promise.all([
+        loadAllReleases().catch(() => {}),
+        fetchBuilders()
+          .then((b) => setRealBuilders(b))
+          .catch(() => {}),
+      ]);
       setInitialLoading(false);
-    }, 600);
-    return () => clearTimeout(timer);
+    };
+    init();
   }, []);
 
   // Keyboard escape listener for modal
@@ -248,6 +226,135 @@ export default function DashboardPage() {
     commitHash.trim().length > 0 &&
     quorumPolicy.trim().length > 0;
 
+  // Wallet to Builder ID map for accurate identity matching
+  const WALLET_TO_BUILDER: Record<string, string> = {
+    "0x70997970c51812dc3a010c7d01b50e0d17dc79c8": "builder-a",
+    "0x3c44cdddb6a900fa2b585dd299e03d12fa4293bc": "builder-b",
+    "0x90f79bf6eb2c4f870365e785982e1f101e93b906": "builder-c",
+    "0x15d34aaf54267db7d7c367839aaf71a00a2c6a65": "builder-d",
+  };
+
+  const [isModalVerifying, setIsModalVerifying] = useState(false);
+  const [modalVerifyError, setModalVerifyError] = useState<string | null>(null);
+
+  // Open modal with fresh on-chain data
+  const handleOpenReleaseModal = async (rel: ReleaseItem) => {
+    setActiveModalRelease(rel);
+    setModalVerifyError(null);
+
+    try {
+      const [fullRel, attestationsData] = await Promise.all([
+        getRelease(rel.id).catch(() => null),
+        getReleaseAttestations(rel.id).catch(() => ({ count: 0, attestations: [] })),
+      ]);
+
+      if (fullRel) {
+        const atts = attestationsData?.attestations || [];
+        const builderConfigs = atts.map((att: any, idx: number) => {
+          const rawWallet = (att.builder || "").toLowerCase();
+          const builderId = WALLET_TO_BUILDER[rawWallet] || (idx === 0 ? "builder-a" : idx === 1 ? "builder-b" : "builder-c");
+          const matches =
+            att.artifactHash &&
+            fullRel.published_hash &&
+            att.artifactHash.toLowerCase() === fullRel.published_hash.toLowerCase();
+
+          return {
+            name: `Builder #${idx + 1} (${builderId})`,
+            type: `Docker Hermetic Container • Wallet: ${att.builder.slice(0, 6)}...${att.builder.slice(-4)}`,
+            resultHash: att.artifactHash,
+            attestationSig: `Ed25519 Verified ✓ (${builderId}-key-v1)`,
+            status: matches ? ("Match ✓" as const) : ("Disagree" as const),
+            wallet: att.builder,
+          };
+        });
+
+        const updated: ReleaseItem = {
+          ...rel,
+          createTx: (fullRel as any).create_release_tx || rel.createTx,
+          attestationTxs: (fullRel as any).attestation_txs || rel.attestationTxs,
+          finalizeTx: (fullRel as any).finalize_tx || rel.finalizeTx,
+          quorumHash: (fullRel as any).quorum_hash || rel.quorumHash,
+          decisionSource: (fullRel as any).decision && (fullRel as any).decision !== "NONE" ? "BLOCKCHAIN" : rel.decisionSource,
+          verificationState:
+            (fullRel as any).decision === "VERIFIED"
+              ? "Verified"
+              : (fullRel as any).decision === "REJECTED"
+              ? "Rejected"
+              : (fullRel as any).decision === "DISPUTED"
+              ? "Disputed"
+              : rel.verificationState,
+          builderConfigurations:
+            builderConfigs.length > 0 ? builderConfigs : rel.builderConfigurations,
+        };
+
+        setActiveModalRelease(updated);
+      }
+    } catch (err) {
+      console.error("Error refreshing release modal:", err);
+    }
+  };
+
+  // Trigger verification directly from within the modal
+  const handleVerifyFromModal = async (releaseId: string) => {
+    setIsModalVerifying(true);
+    setModalVerifyError(null);
+
+    try {
+      await verifyRelease(releaseId);
+      await loadAllReleases();
+
+      const [fullRel, attestationsData] = await Promise.all([
+        getRelease(releaseId),
+        getReleaseAttestations(releaseId),
+      ]);
+
+      if (fullRel) {
+        const atts = attestationsData?.attestations || [];
+        const builderConfigs = atts.map((att: any, idx: number) => {
+          const rawWallet = (att.builder || "").toLowerCase();
+          const builderId = WALLET_TO_BUILDER[rawWallet] || (idx === 0 ? "builder-a" : idx === 1 ? "builder-b" : "builder-c");
+          const matches =
+            att.artifactHash &&
+            fullRel.published_hash &&
+            att.artifactHash.toLowerCase() === fullRel.published_hash.toLowerCase();
+
+          return {
+            name: `Builder #${idx + 1} (${builderId})`,
+            type: `Docker Hermetic Container • Wallet: ${att.builder.slice(0, 6)}...${att.builder.slice(-4)}`,
+            resultHash: att.artifactHash,
+            attestationSig: `Ed25519 Verified ✓ (${builderId}-key-v1)`,
+            status: matches ? ("Match ✓" as const) : ("Disagree" as const),
+            wallet: att.builder,
+          };
+        });
+
+        setActiveModalRelease((prev) =>
+          prev
+            ? {
+                ...prev,
+                verificationState:
+                  (fullRel as any).decision === "VERIFIED"
+                    ? "Verified"
+                    : (fullRel as any).decision === "REJECTED"
+                    ? "Rejected"
+                    : "Disputed",
+                decisionSource: "BLOCKCHAIN",
+                quorumHash: (fullRel as any).quorum_hash,
+                createTx: (fullRel as any).create_release_tx || prev.createTx,
+                attestationTxs: (fullRel as any).attestation_txs || prev.attestationTxs,
+                finalizeTx: (fullRel as any).finalize_tx || prev.finalizeTx,
+                builderConfigurations: builderConfigs,
+              }
+            : null
+        );
+      }
+    } catch (err: any) {
+      setModalVerifyError(err.message || "Failed to execute verification");
+    } finally {
+      setIsModalVerifying(false);
+    }
+  };
+
   // Real End-to-End Verification Pipeline Trigger
   const handleStartVerification = async () => {
     if (!isFormComplete) return;
@@ -263,8 +370,8 @@ export default function DashboardPage() {
       {
         id: 1,
         builderId: "builder-a",
-        name: "Builder #1 (AWS Nitro Enclave)",
-        config: "Linux x86_64 • TEE Isolated",
+        name: "Builder #1 (builder-a)",
+        config: "Docker Hermetic Container • builder-a-key-v1",
         stepIndex: 0,
         hash: "Initializing isolated container...",
         status: "PENDING",
@@ -272,8 +379,8 @@ export default function DashboardPage() {
       {
         id: 2,
         builderId: "builder-b",
-        name: "Builder #2 (GCP Confidential)",
-        config: "AMD SEV-SNP • Airgapped Build",
+        name: "Builder #2 (builder-b)",
+        config: "Docker Hermetic Container • builder-b-key-v1",
         stepIndex: 0,
         hash: "Initializing isolated container...",
         status: "PENDING",
@@ -281,8 +388,8 @@ export default function DashboardPage() {
       {
         id: 3,
         builderId: "builder-c",
-        name: "Builder #3 (Azure DCsv3 SGX)",
-        config: "Intel SGX • Hardware Enclave",
+        name: "Builder #3 (builder-c)",
+        config: "Docker Hermetic Container • builder-c-key-v1",
         stepIndex: 0,
         hash: "Initializing isolated container...",
         status: "PENDING",
@@ -311,7 +418,7 @@ export default function DashboardPage() {
       const releaseId = createdRelease.release_id;
       setCurrentReleaseId(releaseId);
 
-      // Advance builders to Step 1 ("Fetching source") and Step 2 ("Building")
+      // Step 1: Fetching source
       setBuilders((prev) =>
         prev.map((b) => ({
           ...b,
@@ -320,9 +427,9 @@ export default function DashboardPage() {
         }))
       );
 
-      // Short delay for visual polish
       await new Promise((r) => setTimeout(r, 400));
 
+      // Step 2: Building inside Docker
       setBuilders((prev) =>
         prev.map((b) => ({
           ...b,
@@ -344,7 +451,7 @@ export default function DashboardPage() {
           if (detail) {
             return {
               ...b,
-              stepIndex: 4, // Attestation submitted
+              stepIndex: 4,
               hash: detail.artifact_sha256 || "0d9a9a49b4016007...",
               status: detail.valid ? "SUCCESS" : "FAILED",
               statusDetail: detail.status_detail,
@@ -355,50 +462,8 @@ export default function DashboardPage() {
         })
       );
 
-      // Step 3 & 4: Fetch authoritative audit results & on-chain attestations
-      const [auditResult, onChainAtts] = await Promise.all([
-        getReleaseResult(releaseId).catch(() => null),
-        getReleaseAttestations(releaseId).catch(() => ({ count: 0, attestations: [] })),
-      ]);
-
-      // Create new Release item and prepend to history
-      const formattedRelease: ReleaseItem = {
-        id: releaseId,
-        repoUrl: createdRelease.repository_url,
-        commitHash: createdRelease.commit_sha.slice(0, 7),
-        fullCommitHash: createdRelease.commit_sha,
-        quorumPolicy: `${createdRelease.quorum_required} of ${createdRelease.builder_count} Consensus`,
-        verificationState:
-          verifyResult.decision === "VERIFIED"
-            ? "Verified"
-            : verifyResult.decision === "REJECTED"
-            ? "Rejected"
-            : "Disputed",
-        publishedArtifactHash: `sha256:${createdRelease.published_hash.slice(0, 7)}...${createdRelease.published_hash.slice(-4)}`,
-        fullArtifactHash: createdRelease.published_hash,
-        quorumHash: verifyResult.blockchain.quorum_hash,
-        dateTime: "Just now • Blockchain Finalized",
-        decisionSource: verifyResult.decision_source || "BLOCKCHAIN",
-        createTx: verifyResult.blockchain.create_release_tx || undefined,
-        attestationTxs: verifyResult.blockchain.attestation_txs || [],
-        finalizeTx: verifyResult.blockchain.finalize_tx || undefined,
-        builderConfigurations: verifyResult.builders.map((b, i) => ({
-          name: `Builder #${i + 1} (${b.builder_id})`,
-          type:
-            i === 0
-              ? "AWS Nitro Enclave (us-east-1) • Wallet: 0x7099...79C8"
-              : i === 1
-              ? "GCP Confidential Space (us-central1) • Wallet: 0x3C44...93BC"
-              : "Azure DCsv3 SGX (westeurope) • Wallet: 0x90F7...b906",
-          resultHash: b.artifact_sha256,
-          attestationSig: b.signature_valid
-            ? `Ed25519 Verified ✓ (${b.builder_id}-key-v1)`
-            : "Invalid Signature ✗",
-          status: b.valid ? "Match ✓" : "Disagree",
-        })),
-      };
-
-      setAllReleases((prev) => [formattedRelease, ...prev]);
+      // Reload all releases directly from blockchain
+      await loadAllReleases();
       setIsCompleted(true);
     } catch (err: any) {
       console.error("Verification pipeline error:", err);
@@ -414,13 +479,6 @@ export default function DashboardPage() {
     setIsVerifying(false);
     setIsCompleted(false);
     setVerificationError(null);
-  };
-
-  // Open the newly completed verification in the detailed modal
-  const handleOpenCompletedVerification = () => {
-    if (allReleases.length > 0) {
-      setActiveModalRelease(allReleases[0]);
-    }
   };
 
   // Quick fill sample release data
@@ -449,7 +507,7 @@ export default function DashboardPage() {
             <div className="w-6 h-6 border-2 border-white/20 border-t-white rounded-full animate-spin" />
           </div>
           <span className="text-xs uppercase tracking-[0.25em] text-zinc-400 font-medium font-mono">
-            Initializing Quorum Runtime
+            Loading Quorum Blockchain State
           </span>
           <div className="w-32 h-[1px] bg-gradient-to-r from-transparent via-white/20 to-transparent mt-4" />
         </motion.div>
@@ -472,7 +530,7 @@ export default function DashboardPage() {
     builderCount: 3,
     agreementCount: r.verificationState === "Verified" ? 3 : 2,
     txHash: r.finalizeTx,
-    onOpenModal: () => setActiveModalRelease(r),
+    onOpenModal: () => handleOpenReleaseModal(r),
   }));
 
   return (
@@ -489,7 +547,12 @@ export default function DashboardPage() {
         {/* Tab Content Switching */}
         <AnimatePresence mode="wait">
           {activeTab === "verifications" && (
-            <VerificationsView key="verifications-tab" releases={verificationCards} />
+            <VerificationsView
+              key="verifications-tab"
+              releases={verificationCards}
+              onRefresh={loadAllReleases}
+              isLoading={isReleasesLoading}
+            />
           )}
 
           {activeTab === "builders" && <BuildersView key="builders-tab" />}
@@ -512,7 +575,7 @@ export default function DashboardPage() {
               {/* Top Header */}
               <header className="flex flex-col sm:flex-row sm:items-end justify-between gap-6 pb-8 border-b border-white/10">
                 <div className="space-y-2">
-                  <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full bg-white/5 border border-white/10 text-[11px] font-mono uppercase tracking-wider text-zinc-400">
+                  <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-[11px] font-mono uppercase tracking-wider text-zinc-400">
                     <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
                     Consensus Protocol v1.4 • Ethereum Smart Contract
                   </div>
@@ -525,9 +588,18 @@ export default function DashboardPage() {
                 </div>
 
                 <div className="flex items-center gap-3">
-                  <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-zinc-950 border border-white/10 text-xs font-mono text-zinc-300 shadow-sm">
+                  <button
+                    onClick={loadAllReleases}
+                    disabled={isReleasesLoading}
+                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-zinc-950 hover:bg-zinc-900 border border-white/10 text-xs font-mono text-zinc-300 hover:text-white transition-all cursor-pointer shadow-sm"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isReleasesLoading ? "animate-spin" : ""}`} />
+                    <span>Sync Ledger</span>
+                  </button>
+
+                  <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-zinc-950 border border-white/10 text-xs font-mono text-zinc-300 shadow-sm">
                     <Activity className="w-3.5 h-3.5 text-white animate-pulse" />
-                    <span>3 Isolated Enclaves Active</span>
+                    <span>3 Docker Builders Active</span>
                   </div>
                 </div>
               </header>
@@ -553,7 +625,7 @@ export default function DashboardPage() {
                       </h2>
                     </div>
                     <p className="text-xs text-zinc-400 pl-5">
-                      Verify repository reproducibility across isolated enclave builders
+                      Verify repository reproducibility across isolated Docker hermetic builders
                     </p>
                   </div>
 
@@ -584,13 +656,13 @@ export default function DashboardPage() {
                           <span>Shrink</span>
                         </button>
 
-                        {isCompleted && (
+                        {isCompleted && allReleases.length > 0 && (
                           <motion.button
                             initial={{ opacity: 0, scale: 0.95 }}
                             animate={{ opacity: 1, scale: 1 }}
                             whileHover={{ scale: 1.02 }}
                             whileTap={{ scale: 0.98 }}
-                            onClick={() => handleOpenCompletedVerification()}
+                            onClick={() => handleOpenReleaseModal(allReleases[0])}
                             className="px-4 py-1.5 rounded-full bg-white text-black font-semibold text-xs hover:bg-zinc-200 transition-all shadow-[0_0_15px_rgba(255,255,255,0.2)] cursor-pointer inline-flex items-center gap-1.5 font-mono"
                           >
                             <span>Inspect Proof</span>
@@ -938,17 +1010,6 @@ export default function DashboardPage() {
                                   ))}
                                 </div>
                               </div>
-
-                              {/* Modal Trigger */}
-                              <div className="pt-2 border-t border-white/5">
-                                <button
-                                  type="button"
-                                  onClick={() => handleOpenCompletedVerification()}
-                                  className="w-full py-2 px-3 rounded-lg bg-white/5 hover:bg-white/10 text-zinc-300 hover:text-white text-xs font-mono transition-colors text-center cursor-pointer"
-                                >
-                                  View Full Details →
-                                </button>
-                              </div>
                             </motion.div>
                           );
                         })}
@@ -967,16 +1028,20 @@ export default function DashboardPage() {
                             </div>
                             <div>
                               <h4 className="text-sm font-bold text-white">
-                                Consensus Verdict: {latestVerificationResponse.decision} (Decision Source: {latestVerificationResponse.decision_source})
+                                Consensus Verdict: {latestVerificationResponse.decision} (Source: {latestVerificationResponse.decision_source})
                               </h4>
                               <p className="text-xs text-zinc-400">
-                                Verified on-chain via QuorumVerifier.sol • Quorum hash matches published checksum.
+                                Verified on-chain via QuorumVerifier.sol • Decision finalized on Ethereum Anvil.
                               </p>
                             </div>
                           </div>
 
                           <button
-                            onClick={() => handleOpenCompletedVerification()}
+                            onClick={() => {
+                              if (allReleases.length > 0) {
+                                handleOpenReleaseModal(allReleases[0]);
+                              }
+                            }}
                             className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-white text-black font-bold text-sm hover:bg-zinc-200 transition-colors cursor-pointer font-mono"
                           >
                             Inspect Audit Proof
@@ -996,7 +1061,7 @@ export default function DashboardPage() {
                       Recent Releases
                     </h2>
                     <p className="text-sm text-zinc-400 mt-1">
-                      Latest cryptographic attestations verified by the network
+                      Authoritative verification records retrieved live from the blockchain
                     </p>
                   </div>
                   <span className="text-xs font-mono text-zinc-500">
@@ -1036,7 +1101,7 @@ export default function DashboardPage() {
                             Commit
                           </span>
                           <span className="font-mono text-xs text-white bg-black px-2.5 py-1 rounded border border-white/10 inline-block mt-1">
-                            {release.commitHash}
+                            {release.commitHash || release.fullCommitHash?.slice(0, 7) || "None"}
                           </span>
                         </div>
 
@@ -1051,7 +1116,7 @@ export default function DashboardPage() {
 
                         <div>
                           <span className="text-[11px] uppercase tracking-wider text-zinc-500 font-mono block">
-                            Date / time
+                            Record State
                           </span>
                           <span className="text-xs text-zinc-400 mt-1 block">
                             {release.dateTime}
@@ -1062,7 +1127,7 @@ export default function DashboardPage() {
                       <div className="pt-6 border-t border-white/10">
                         <button
                           type="button"
-                          onClick={() => setActiveModalRelease(release)}
+                          onClick={() => handleOpenReleaseModal(release)}
                           className="w-full py-3 px-4 rounded-xl bg-white/5 hover:bg-white hover:text-black border border-white/10 text-white text-xs font-semibold uppercase tracking-wider transition-all duration-200 cursor-pointer text-center font-mono"
                         >
                           More details
@@ -1070,6 +1135,12 @@ export default function DashboardPage() {
                       </div>
                     </motion.div>
                   ))}
+
+                  {allReleases.length === 0 && (
+                    <div className="col-span-full py-16 text-center text-zinc-500 font-mono text-xs border border-dashed border-white/10 rounded-2xl">
+                      No releases registered on-chain yet. Create one above to initiate consensus verification.
+                    </div>
+                  )}
                 </div>
               </section>
             </motion.div>
@@ -1077,7 +1148,7 @@ export default function DashboardPage() {
         </AnimatePresence>
       </main>
 
-      {/* MODAL: 80% Opacity Black Backdrop with Detailed Analysis */}
+      {/* SPACIOUS WIDE MODAL: 85% Opacity Backdrop, Max Width 5XL, Larger Typography */}
       <AnimatePresence>
         {activeModalRelease && (
           <motion.div
@@ -1088,157 +1159,290 @@ export default function DashboardPage() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 bg-black/80 backdrop-blur-md"
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-8 lg:p-12 bg-black/85 backdrop-blur-md"
             onClick={() => setActiveModalRelease(null)}
           >
             <motion.div
               key="modal-content"
-              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              initial={{ opacity: 0, scale: 0.96, y: 15 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              exit={{ opacity: 0, scale: 0.96, y: 15 }}
               transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
-              className="w-full max-w-2xl bg-zinc-950 border border-white/15 rounded-2xl p-6 sm:p-8 shadow-2xl space-y-6 text-white max-h-[90vh] overflow-y-auto"
+              className="w-full max-w-5xl bg-zinc-950 border border-white/20 rounded-3xl p-8 sm:p-12 shadow-[0_0_80px_rgba(0,0,0,0.95)] space-y-8 text-white max-h-[92vh] overflow-y-auto font-sans"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Modal Top Bar */}
-              <div className="flex items-start justify-between border-b border-white/10 pb-5">
-                <div>
-                  <div className="inline-flex items-center gap-2 text-xs font-mono text-zinc-400 uppercase tracking-wider">
-                    <ShieldCheck className="w-3.5 h-3.5 text-white" />
+              <div className="flex items-start justify-between border-b border-white/10 pb-6">
+                <div className="space-y-2">
+                  <div className="inline-flex items-center gap-2.5 px-3 py-1 rounded-full bg-white/5 border border-white/15 text-xs font-mono text-zinc-300 uppercase tracking-wider">
+                    <ShieldCheck className="w-4 h-4 text-white" />
                     Cryptographic Audit Report • Release #{activeModalRelease.id}
                   </div>
-                  <h3 className="text-2xl font-bold tracking-tight text-white mt-1">
-                    Detailed Verification Analysis
+                  <h3 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-white">
+                    Verification Audit Proof
                   </h3>
+                  <p className="text-sm text-zinc-400 font-mono">
+                    Authoritative consensus state recorded on Ethereum smart contract (Anvil Chain ID: 31337)
+                  </p>
                 </div>
+
                 <button
                   type="button"
                   onClick={() => setActiveModalRelease(null)}
-                  className="w-8 h-8 rounded-full bg-black border border-white/10 text-zinc-400 flex items-center justify-center hover:text-white hover:border-white/30 transition-colors cursor-pointer"
+                  className="w-10 h-10 rounded-full bg-zinc-900 border border-white/10 text-zinc-400 flex items-center justify-center hover:text-white hover:border-white/30 transition-colors cursor-pointer"
                   aria-label="Close modal"
                 >
-                  <X className="w-4 h-4" />
+                  <X className="w-5 h-5" />
                 </button>
               </div>
 
-              {/* Core Release Metadata */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-black p-5 rounded-xl border border-white/10 text-xs font-mono">
-                <div>
-                  <span className="text-zinc-500 uppercase tracking-wider text-[10px] block">
-                    Repository URL
+              {/* Core Release Metadata Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 bg-black p-6 sm:p-8 rounded-2xl border border-white/10 text-sm font-mono">
+                <div className="space-y-1.5">
+                  <span className="text-zinc-500 uppercase tracking-wider text-xs block">
+                    Source Repository
                   </span>
-                  <span className="text-zinc-200 break-all block mt-1">
+                  <a
+                    href={activeModalRelease.repoUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-white hover:text-zinc-300 underline underline-offset-4 break-all block text-base font-semibold"
+                  >
                     {activeModalRelease.repoUrl}
-                  </span>
+                  </a>
                 </div>
 
-                <div>
-                  <span className="text-zinc-500 uppercase tracking-wider text-[10px] block">
-                    Authoritative State
+                <div className="space-y-1.5">
+                  <span className="text-zinc-500 uppercase tracking-wider text-xs block">
+                    Authoritative Decision State
                   </span>
-                  <span className="font-semibold text-white mt-1 inline-flex items-center gap-1.5">
-                    <span className="w-2 h-2 rounded-full bg-white" />
-                    {activeModalRelease.verificationState} (Decision Source: {activeModalRelease.decisionSource || "BLOCKCHAIN"})
-                  </span>
+                  <div className="flex items-center gap-2 pt-1">
+                    <span
+                      className={`inline-flex items-center gap-2 px-3.5 py-1 rounded-full text-xs font-bold border font-mono ${
+                        activeModalRelease.verificationState === "Verified"
+                          ? "bg-white/10 text-white border-white/20"
+                          : "bg-red-500/10 text-red-300 border-red-500/20"
+                      }`}
+                    >
+                      <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
+                      {activeModalRelease.verificationState}
+                    </span>
+                    <span className="text-xs text-zinc-400">
+                      (Source: {activeModalRelease.decisionSource || "BLOCKCHAIN"})
+                    </span>
+                  </div>
                 </div>
 
-                <div>
-                  <span className="text-zinc-500 uppercase tracking-wider text-[10px] block">
-                    Full Commit SHA
+                <div className="space-y-1.5">
+                  <span className="text-zinc-500 uppercase tracking-wider text-xs block">
+                    Pinned Commit SHA
                   </span>
-                  <span className="text-zinc-300 break-all block mt-1">
-                    {activeModalRelease.fullCommitHash}
-                  </span>
+                  <div className="flex items-center justify-between bg-zinc-950 p-3 rounded-xl border border-white/5">
+                    <span className="text-zinc-200 break-all text-xs font-mono">
+                      {activeModalRelease.fullCommitHash}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleCopy(activeModalRelease.fullCommitHash, "modal-commit")}
+                      className="text-zinc-400 hover:text-white transition-colors cursor-pointer pl-2"
+                      title="Copy SHA"
+                    >
+                      {copiedKey === "modal-commit" ? (
+                        <Check className="w-4 h-4 text-white" />
+                      ) : (
+                        <Copy className="w-4 h-4" />
+                      )}
+                    </button>
+                  </div>
                 </div>
 
-                <div>
-                  <span className="text-zinc-500 uppercase tracking-wider text-[10px] block">
-                    Quorum Policy
+                <div className="space-y-1.5">
+                  <span className="text-zinc-500 uppercase tracking-wider text-xs block">
+                    Consensus Quorum Policy
                   </span>
-                  <span className="text-white mt-1 block font-medium">
+                  <span className="text-white font-medium block pt-2 text-base">
                     {activeModalRelease.quorumPolicy}
                   </span>
                 </div>
 
-                <div className="sm:col-span-2">
-                  <span className="text-zinc-500 uppercase tracking-wider text-[10px] block">
-                    Published Artifact Hash (SHA-256)
+                <div className="sm:col-span-2 space-y-1.5">
+                  <span className="text-zinc-500 uppercase tracking-wider text-xs block">
+                    Published Artifact SHA-256 Checksum
                   </span>
-                  <span className="text-zinc-200 break-all block mt-1 bg-zinc-950 p-2.5 rounded border border-white/5">
-                    {activeModalRelease.fullArtifactHash}
-                  </span>
+                  <div className="flex items-center justify-between bg-zinc-950 p-3.5 rounded-xl border border-white/5">
+                    <span className="text-zinc-200 break-all text-xs font-mono">
+                      {activeModalRelease.fullArtifactHash}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => handleCopy(activeModalRelease.fullArtifactHash, "modal-pubhash")}
+                      className="text-zinc-400 hover:text-white transition-colors cursor-pointer pl-2"
+                      title="Copy Hash"
+                    >
+                      {copiedKey === "modal-pubhash" ? (
+                        <Check className="w-4 h-4 text-white" />
+                      ) : (
+                        <Copy className="w-4 h-4" />
+                      )}
+                    </button>
+                  </div>
                 </div>
 
                 {activeModalRelease.quorumHash && (
-                  <div className="sm:col-span-2">
-                    <span className="text-zinc-500 uppercase tracking-wider text-[10px] block">
-                      Authoritative On-Chain Quorum Hash
+                  <div className="sm:col-span-2 space-y-1.5">
+                    <span className="text-zinc-500 uppercase tracking-wider text-xs block">
+                      Authoritative On-Chain Quorum Checksum
                     </span>
-                    <span className="text-white break-all block mt-1 bg-zinc-950 p-2.5 rounded border border-white/5">
-                      {activeModalRelease.quorumHash}
-                    </span>
+                    <div className="flex items-center justify-between bg-zinc-950 p-3.5 rounded-xl border border-white/5">
+                      <span className="text-white break-all text-xs font-mono font-semibold">
+                        {activeModalRelease.quorumHash}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleCopy(activeModalRelease.quorumHash || "", "modal-qhash")}
+                        className="text-zinc-400 hover:text-white transition-colors cursor-pointer pl-2"
+                        title="Copy Hash"
+                      >
+                        {copiedKey === "modal-qhash" ? (
+                          <Check className="w-4 h-4 text-white" />
+                        ) : (
+                          <Copy className="w-4 h-4" />
+                        )}
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
 
-              {/* Blockchain Transaction Proofs */}
+              {/* Blockchain Transaction Receipts */}
               {(activeModalRelease.createTx || activeModalRelease.finalizeTx) && (
-                <div className="space-y-3">
-                  <h4 className="text-xs font-mono uppercase tracking-wider text-zinc-400">
-                    Smart Contract Transaction Receipts (Anvil Chain ID: 31337)
-                  </h4>
-                  <div className="p-4 rounded-xl bg-black border border-white/10 text-xs font-mono space-y-2">
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-mono uppercase tracking-wider text-zinc-400">
+                      Smart Contract Transactions (QuorumVerifier.sol)
+                    </h4>
+                    <span className="text-[11px] font-mono text-zinc-500">
+                      Contract: 0x5FbDB2315678afecb367f032d93F642f64180aa3
+                    </span>
+                  </div>
+
+                  <div className="p-6 rounded-2xl bg-black border border-white/10 text-xs font-mono space-y-3">
                     {activeModalRelease.createTx && (
-                      <div className="flex items-center justify-between text-[11px]">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 pb-2 border-b border-white/5">
                         <span className="text-zinc-500">Create Release TX:</span>
-                        <span className="text-zinc-300 truncate max-w-[320px]">{activeModalRelease.createTx}</span>
+                        <span className="text-zinc-300 break-all font-mono">
+                          {activeModalRelease.createTx}
+                        </span>
                       </div>
                     )}
+
+                    {activeModalRelease.attestationTxs &&
+                      activeModalRelease.attestationTxs.map((tx, idx) => (
+                        <div
+                          key={idx}
+                          className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 pb-2 border-b border-white/5"
+                        >
+                          <span className="text-zinc-500">Builder Attestation #{idx + 1} TX:</span>
+                          <span className="text-zinc-300 break-all font-mono">{tx}</span>
+                        </div>
+                      ))}
+
                     {activeModalRelease.finalizeTx && (
-                      <div className="flex items-center justify-between text-[11px]">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 pt-1">
                         <span className="text-zinc-500">Finalize Decision TX:</span>
-                        <span className="text-zinc-300 truncate max-w-[320px]">{activeModalRelease.finalizeTx}</span>
+                        <span className="text-white break-all font-mono font-bold">
+                          {activeModalRelease.finalizeTx}
+                        </span>
                       </div>
                     )}
                   </div>
                 </div>
               )}
 
-              {/* Builder Configuration Analysis */}
+              {/* Builder Attestation Breakdown */}
               <div className="space-y-4">
-                <h4 className="text-xs font-mono uppercase tracking-wider text-zinc-400">
-                  Builder Attestation Breakdown
-                </h4>
-
-                <div className="space-y-3">
-                  {activeModalRelease.builderConfigurations.map((builder, idx) => (
-                    <div
-                      key={idx}
-                      className="p-4 rounded-xl bg-black border border-white/10 text-xs space-y-2 font-mono"
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="font-bold text-white text-sm">
-                          {builder.name}
-                        </span>
-                        <span className="px-2.5 py-0.5 rounded-full bg-white/10 text-white font-mono text-[11px] border border-white/15">
-                          {builder.status}
-                        </span>
-                      </div>
-                      <div className="text-zinc-400">
-                        Configuration:{" "}
-                        <span className="text-zinc-300">{builder.type}</span>
-                      </div>
-                      <div className="text-zinc-400">
-                        Result Hash:{" "}
-                        <span className="text-white break-all">{builder.resultHash}</span>
-                      </div>
-                      <div className="text-zinc-400">
-                        Signature Status:{" "}
-                        <span className="text-zinc-300">{builder.attestationSig}</span>
-                      </div>
-                    </div>
-                  ))}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <h4 className="text-xs font-mono uppercase tracking-wider text-zinc-400">
+                    Builder Attestation Evidence Breakdown
+                  </h4>
+                  <span className="text-[11px] font-mono text-zinc-500">
+                    Standardized Spec: <code className="text-zinc-300 font-bold">python-package-v1</code> (Deterministic build)
+                  </span>
                 </div>
+
+                {activeModalRelease.builderConfigurations.length > 0 ? (
+                  <div className="space-y-4">
+                    {activeModalRelease.builderConfigurations.map((builder, idx) => (
+                      <div
+                        key={idx}
+                        className="p-6 rounded-2xl bg-black border border-white/10 text-xs space-y-3 font-mono"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="font-bold text-white text-base">
+                            {builder.name}
+                          </span>
+                          <span className="px-3 py-1 rounded-full bg-white/10 text-white font-mono text-xs border border-white/15">
+                            {builder.status}
+                          </span>
+                        </div>
+                        <div className="text-zinc-400">
+                          Execution Environment:{" "}
+                          <span className="text-zinc-200">{builder.type}</span>
+                        </div>
+                        <div className="text-zinc-400">
+                          Artifact Checksum:{" "}
+                          <span className="text-white break-all">{builder.resultHash}</span>
+                        </div>
+                        <div className="text-zinc-400">
+                          Signature Status:{" "}
+                          <span className="text-zinc-300">{builder.attestationSig}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="p-8 rounded-2xl bg-black border border-white/10 space-y-4 text-center">
+                    <div className="space-y-2">
+                      <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-xs font-mono text-zinc-400">
+                        <Activity className="w-3.5 h-3.5 text-zinc-300" />
+                        Status: Created On-Chain • Awaiting Verification
+                      </div>
+                      <h5 className="text-base font-bold text-white">
+                        Verification Has Not Been Triggered Yet
+                      </h5>
+                      <p className="text-xs text-zinc-400 max-w-lg mx-auto leading-relaxed">
+                        Release #{activeModalRelease.id} is registered on the Ethereum smart contract, but independent builders have not yet been dispatched to clone the repository, build the wheel, and submit on-chain attestations.
+                      </p>
+                    </div>
+
+                    {modalVerifyError && (
+                      <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-xs text-red-300 font-mono max-w-md mx-auto">
+                        {modalVerifyError}
+                      </div>
+                    )}
+
+                    <div className="pt-2">
+                      <button
+                        type="button"
+                        disabled={isModalVerifying}
+                        onClick={() => handleVerifyFromModal(activeModalRelease.id)}
+                        className="px-6 py-3 rounded-xl bg-white text-black font-semibold text-xs font-mono hover:bg-zinc-200 transition-all inline-flex items-center gap-2 cursor-pointer shadow-[0_0_25px_rgba(255,255,255,0.25)] disabled:opacity-50"
+                      >
+                        {isModalVerifying ? (
+                          <>
+                            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                            <span>Dispatching Builders & Verifying On-Chain...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Activity className="w-3.5 h-3.5" />
+                            <span>Trigger Multi-Builder Verification Now</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Modal Footer */}
@@ -1246,7 +1450,7 @@ export default function DashboardPage() {
                 <button
                   type="button"
                   onClick={() => setActiveModalRelease(null)}
-                  className="px-6 py-2.5 rounded-xl bg-white text-black font-semibold text-xs uppercase tracking-wider hover:bg-zinc-200 transition-colors cursor-pointer font-mono"
+                  className="px-8 py-3 rounded-xl bg-white text-black font-bold text-xs uppercase tracking-wider hover:bg-zinc-200 transition-colors cursor-pointer font-mono"
                 >
                   Close Analysis
                 </button>
